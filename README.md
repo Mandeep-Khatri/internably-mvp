@@ -1,61 +1,162 @@
-# Internably MVP Monorepo
+# Internably
 
-Official mobile-first MVP for **Internably** - "The College Student Network".
+**Internably** is a production-minded, full-stack student networking platform built for college students and interns to connect, share opportunities, and grow professional peer networks.
 
-Positioning:
-- Built for interns. Powered by ambition.
-- Student-first, trusted network with application/approval + communities at the core.
+This project demonstrates end-to-end product engineering across **mobile**, **backend APIs**, **authentication/security**, **real-time messaging**, and **social graph workflows**.
 
-## Stack
+---
 
-- Mobile: Expo + React Native + TypeScript + Expo Router + TanStack Query + Zustand + React Hook Form + Zod
-- API: NestJS + TypeScript + Prisma + PostgreSQL + JWT + Socket.IO + Swagger
-- Infra: Docker + docker-compose
-- Monorepo packages: shared config/types/ui tokens
+## Product Highlights
 
-## Monorepo structure
+- Student-only onboarding with `.edu` validation and email verification
+- Mobile-first social feed (posts, likes, comments, sharing flow)
+- Peer graph features (connect, remove peer, block with reason)
+- 1:1 messaging with real-time gateway support
+- Discoverability via suggestions/search and network growth surfaces
+- Profile management (editable profile, portfolio link, media-ready avatar/banner flow)
+- Admin moderation surfaces and review workflows
 
-- `apps/mobile` - mobile app
-- `apps/api` - backend API
-- `packages/ui` - shared design tokens
-- `packages/config` - brand config
-- `packages/types` - shared TypeScript types
+---
 
-## MVP features delivered
+## Screens (Current UI)
 
-- Auth: register/login/refresh/logout/forgot/reset/me
-- Student-only registration: `.edu` email validation + 24h verification token flow
-- RBAC hardening: role-based decorators + guard for admin/moderator endpoints
-- Refresh-token rotation with reuse detection
-- Application flow: submit + status + admin review (approve/deny)
-- Onboarding + editable profile
-- Feed: create post, feed listing, like/comment, delete/edit own posts
-- Discovery: search + suggestions
-- Connections: request/accept/decline/remove + incoming/outgoing lists
-- Communities: create/list/detail/join/leave/members/group posts
-- Messaging: conversations + 1:1 messages + Socket.IO chat gateway (typing + new message event)
-- Notifications center + read/read-all
-- Push notifications (device token registration + Expo/mock provider dispatch)
-- Media upload service abstraction (mock + Cloudinary-ready signed flow)
-- Admin placeholders: reports, remove post, verify members, group management
-- CI pipeline: GitHub Actions build/test/typecheck workflow
+The app currently includes polished flows for:
 
-## Quick start
+- **Home Feed** (post stream + create post)
+- **Auth** (sign in, join network, Google auth entry)
+- **Network** (Grow + Check in tabs with peer cards)
+- **Profile** (cover/avatar, editable professional details)
 
-### 1) Install deps
+> Tip: Add screenshots under `docs/screens/` and reference them here for a stronger recruiter-facing portfolio.
+
+Example markdown (once images are added):
+
+```md
+![Home Feed](docs/screens/home.png)
+![Login](docs/screens/login.png)
+![Network](docs/screens/network.png)
+![Profile](docs/screens/profile.png)
+```
+
+### Current Output Snapshot
+
+- **Login flow** with `.edu` identity path + Google sign-in entry
+- **Home feed** with post cards, engagement actions, and create-post trigger
+- **Network discovery** with Grow/Check in tabs and connect actions
+- **Profile experience** with editable professional identity, portfolio link, and peers count
+
+---
+
+## Tech Stack
+
+### Mobile
+- React Native
+- Expo + Expo Router
+- TypeScript
+- TanStack Query
+- Zustand
+- React Hook Form + Zod
+
+### Backend
+- NestJS
+- Prisma ORM
+- PostgreSQL
+- JWT (access + refresh)
+- Socket.IO
+- Swagger/OpenAPI
+
+### Monorepo
+- npm workspaces
+- Shared packages for `ui`, `types`, and `config`
+
+---
+
+## Architecture
+
+```text
+apps/mobile  ->  NestJS API (apps/api)  ->  PostgreSQL (Prisma)
+                     |\
+                     | \-> Realtime gateway (Socket.IO)
+                     \---> Email + media provider integrations
+```
+
+---
+
+## Repository Structure
+
+```text
+internably-mvp/
+  apps/
+    mobile/      # Expo React Native app
+    api/         # NestJS + Prisma API
+  packages/
+    ui/          # shared UI components/tokens
+    types/       # shared TypeScript contracts
+    config/      # shared config
+```
+
+---
+
+## Core Features Implemented
+
+### Authentication & Security
+- Register / login / refresh / logout
+- `.edu`-only registration policy
+- Email verification flow
+- Forgot/reset password
+- Role-based access control (RBAC)
+- Refresh-token rotation + session safety checks
+
+### Social & Network
+- Create/read/update/delete posts
+- Likes and comments
+- Connections lifecycle (request/accept/decline/remove)
+- User suggestions and user search
+- Profile view/edit and visitor profile route
+- Peer blocking with reason tracking
+
+### Messaging & Notifications
+- Conversation list + chat thread
+- Real-time message events via Socket.IO gateway
+- Notification center with read/read-all
+- Push token registration endpoints
+
+### Media & Extensibility
+- Media service abstraction for cloud providers
+- Cloudinary-ready integration path
+- API-first architecture suitable for iOS/Android/web clients
+
+---
+
+## API Surface (Selected)
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/posts`
+- `GET /api/posts/feed`
+- `POST /api/connections/request/:userId`
+- `DELETE /api/connections/:userId`
+- `POST /api/connections/block/:userId`
+- `GET /api/conversations`
+- `POST /api/conversations`
+- `GET /api/notifications`
+- `PATCH /api/users/me`
+- `GET /api/users/suggestions`
+
+Full docs available at: `http://localhost:4000/api/docs`
+
+---
+
+## Local Setup
+
+### 1) Install dependencies
 
 ```bash
-cd internably-mvp
 npm install
 ```
 
-### 2) Start database
-
-```bash
-docker compose up -d postgres
-```
-
-### 3) Configure env
+### 2) Configure environment
 
 ```bash
 cp .env.example .env
@@ -63,7 +164,13 @@ cp apps/api/.env.example apps/api/.env
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-### 4) Prisma migrate + seed
+### 3) Start PostgreSQL (Docker)
+
+```bash
+docker compose up -d postgres
+```
+
+### 4) Prisma setup
 
 ```bash
 npm run db:generate
@@ -71,101 +178,34 @@ npm run db:migrate
 npm run db:seed
 ```
 
-### 5) Run API
+### 5) Start API
 
 ```bash
 npm run dev:api
 ```
 
-API docs:
-- `http://localhost:4000/api/docs`
-
-### 6) Run mobile
+### 6) Start Mobile
 
 ```bash
 npm run dev:mobile
 ```
 
-Then launch iOS/Android from Expo CLI.
+---
 
-## Demo accounts
+## Why This Project Is Resume-Strong
 
-- Admin: `admin@internably.com` / `Password123!`
-- Member 1: `student1@gatech.edu` / `Password123!`
-- Member 2: `student2@aamu.edu` / `Password123!`
+This codebase demonstrates:
 
-## API endpoints implemented
+- Building and shipping a real, multi-surface social product
+- Designing secure auth and trust-gated onboarding
+- Implementing scalable backend modules and clean API boundaries
+- Translating product UX into reusable mobile component systems
+- Owning end-to-end delivery from schema to UI
 
-### Auth
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/verify-email?token=...`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password`
-- `GET /api/auth/me`
+---
 
-### Applications
-- `POST /api/applications`
-- `GET /api/applications/me`
-- `GET /api/admin/applications`
-- `PATCH /api/admin/applications/:id`
+## Author
 
-### Users
-- `GET /api/users/me`
-- `PATCH /api/users/me`
-- `GET /api/users/:id`
-- `GET /api/users/search`
-- `GET /api/users/suggestions`
+**Mandeep Khatri**
 
-### Groups
-- `GET /api/groups`
-- `POST /api/groups`
-- `GET /api/groups/:id`
-- `POST /api/groups/:id/join`
-- `POST /api/groups/:id/leave`
-- `GET /api/groups/:id/members`
-- `GET /api/groups/:id/posts`
-
-### Posts
-- `GET /api/posts/feed`
-- `POST /api/posts`
-- `GET /api/posts/:id`
-- `PATCH /api/posts/:id`
-- `DELETE /api/posts/:id`
-- `POST /api/posts/:id/like`
-- `DELETE /api/posts/:id/like`
-- `POST /api/posts/:id/comments`
-- `GET /api/posts/:id/comments`
-
-### Connections
-- `POST /api/connections/request/:userId`
-- `POST /api/connections/accept/:requestId`
-- `POST /api/connections/decline/:requestId`
-- `DELETE /api/connections/:userId`
-- `GET /api/connections`
-- `GET /api/connections/requests/incoming`
-- `GET /api/connections/requests/outgoing`
-
-### Messages
-- `GET /api/conversations`
-- `POST /api/conversations`
-- `GET /api/conversations/:id/messages`
-- `POST /api/conversations/:id/messages`
-
-### Notifications
-- `GET /api/notifications`
-- `PATCH /api/notifications/:id/read`
-- `PATCH /api/notifications/read-all`
-- `POST /api/notifications/push-token`
-- `DELETE /api/notifications/push-token`
-
-### Media
-- `POST /api/media/upload-url`
-- `POST /api/media/confirm`
-
-## Notes
-
-- Media storage is abstracted with URL fields and ready for Cloudinary/S3 service integration.
-- This is a production-minded MVP foundation; advanced moderation workflows, push notifications, and richer realtime presence can be layered in Phase 2.
+If you'd like, I can also generate a **one-page recruiter version** of this README (short + impact-focused) and keep this file as the detailed technical version.

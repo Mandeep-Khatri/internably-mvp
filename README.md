@@ -194,20 +194,7 @@ npm run dev:mobile
 
 ---
 
-## Why This Project Is Resume-Strong
-
-This codebase demonstrates:
-
-- Building and shipping a real, multi-surface social product
-- Designing secure auth and trust-gated onboarding
-- Implementing scalable backend modules and clean API boundaries
-- Translating product UX into reusable mobile component systems
-- Owning end-to-end delivery from schema to UI
-
----
 
 ## Author
 
 **Mandeep Khatri**
-
-If you'd like, I can also generate a **one-page recruiter version** of this README (short + impact-focused) and keep this file as the detailed technical version.

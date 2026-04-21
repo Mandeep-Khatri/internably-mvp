@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      - name: Generate Prisma client
+        run: HOME=/tmp npm run prisma:generate -w apps/api
+
+      - name: Build API
+        run: HOME=/tmp npm run build -w apps/api
+
+      - name: Run API tests
+        run: npm run test -w apps/api -- --runInBand
+
+      - name: Typecheck mobile
+        run: npx tsc -p apps/mobile/tsconfig.json --noEmit
+

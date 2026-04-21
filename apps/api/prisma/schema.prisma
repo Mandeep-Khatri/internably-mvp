@@ -1,0 +1,381 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+enum ConnectionRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum NotificationType {
+  CONNECTION_REQUEST
+  CONNECTION_ACCEPTED
+  MESSAGE
+  POST_LIKE
+  POST_COMMENT
+  GROUP_UPDATE
+  ADMIN_UPDATE
+}
+
+enum GroupType {
+  SCHOOL
+  CITY
+  HBCU
+  COMPANY
+  INTEREST
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  email              String               @unique
+  username           String               @unique
+  passwordHash       String
+  verificationTokenHash      String?      @unique
+  verificationTokenExpiresAt DateTime?
+  role               Role                 @default(USER)
+  isVerified         Boolean              @default(false)
+  isApproved         Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  profile            Profile?
+  refreshTokens      RefreshToken[]
+  sentConnectionRequests     ConnectionRequest[] @relation("sentRequests")
+  receivedConnectionRequests ConnectionRequest[] @relation("receivedRequests")
+  connectionsA       Connection[]         @relation("connectionA")
+  connectionsB       Connection[]         @relation("connectionB")
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  conversations      ConversationMember[]
+  messages           Message[]
+  notifications      Notification[]
+  pushDevices        PushDevice[]
+  groupsOwned        Group[]              @relation("groupOwner")
+  groupMemberships   GroupMember[]
+  applications       Application[]
+  reportsFiled       Report[]             @relation("reporter")
+  reportsAgainst     Report[]             @relation("reportedUser")
+  mediaAssets        MediaAsset[]
+  blocksInitiated    Block[]              @relation("blocksInitiated")
+  blocksReceived     Block[]              @relation("blocksReceived")
+}
+
+model Profile {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  firstName            String
+  lastName             String
+  pronouns             String?
+  headline             String?
+  bio                  String?
+  schoolId             String?
+  companyId            String?
+  city                 String?
+  major                String?
+  degree               String?
+  graduationYear       Int?
+  gpa                  Float?
+  linkedinUrl          String?
+  websiteUrl           String?
+  avatarUrl            String?
+  bannerUrl            String?
+  openToNetwork        Boolean  @default(true)
+  openToInternship     Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school               School?  @relation(fields: [schoolId], references: [id])
+  company              Company? @relation(fields: [companyId], references: [id])
+  interests            UserInterest[]
+}
+
+model RefreshToken {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Application {
+  id                  String            @id @default(cuid())
+  userId              String?
+  firstName           String
+  lastName            String
+  email               String
+  school              String
+  graduationYear      Int
+  major               String
+  internshipCompany   String?
+  city                String
+  linkedinUrl         String?
+  proofOfEnrollmentUrl String?
+  status              ApplicationStatus @default(PENDING)
+  reviewedByUserId    String?
+  reviewNotes         String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  user                User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([status])
+}
+
+model School {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  city        String?
+  state       String?
+  isHBCU      Boolean   @default(false)
+  profiles    Profile[]
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  city        String?
+  profiles    Profile[]
+}
+
+model Interest {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  users       UserInterest[]
+}
+
+model UserInterest {
+  userId      String
+  profileId   String
+  interestId  String
+
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  interest    Interest  @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, interestId])
+  @@index([userId])
+}
+
+model Group {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  type        GroupType
+  description String?
+  bannerUrl   String?
+  ownerId     String
+  createdAt   DateTime    @default(now())
+
+  owner       User        @relation("groupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     GroupMember[]
+  posts       Post[]
+
+  @@index([type])
+}
+
+model GroupMember {
+  groupId      String
+  userId       String
+  isModerator  Boolean   @default(false)
+  joinedAt     DateTime  @default(now())
+
+  group        Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+model Post {
+  id          String    @id @default(cuid())
+  authorId    String
+  groupId     String?
+  content     String
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  comments    Comment[]
+  likes       Like[]
+
+  @@index([authorId, createdAt])
+  @@index([groupId, createdAt])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+  postId      String
+  authorId    String
+  content     String
+  createdAt   DateTime  @default(now())
+
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+model Like {
+  postId      String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+}
+
+model ConnectionRequest {
+  id          String                  @id @default(cuid())
+  fromUserId  String
+  toUserId    String
+  status      ConnectionRequestStatus @default(PENDING)
+  createdAt   DateTime                @default(now())
+
+  fromUser    User @relation("sentRequests", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User @relation("receivedRequests", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, status])
+}
+
+model Connection {
+  id          String   @id @default(cuid())
+  userAId     String
+  userBId     String
+  createdAt   DateTime @default(now())
+
+  userA       User     @relation("connectionA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB       User     @relation("connectionB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+}
+
+model Block {
+  id          String   @id @default(cuid())
+  blockerId   String
+  blockedId   String
+  reason      String
+  createdAt   DateTime @default(now())
+
+  blocker     User     @relation("blocksInitiated", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked     User     @relation("blocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model Conversation {
+  id          String               @id @default(cuid())
+  createdAt   DateTime             @default(now())
+  members     ConversationMember[]
+  messages    Message[]
+}
+
+model ConversationMember {
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+  lastReadAt     DateTime?
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  userId         String
+  type           NotificationType
+  title          String
+  body           String
+  entityId       String?
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}
+
+model PushDevice {
+  id             String   @id @default(cuid())
+  userId         String
+  token          String   @unique
+  platform       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastSeenAt     DateTime @default(now())
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Report {
+  id             String      @id @default(cuid())
+  reporterId     String
+  reportedUserId String?
+  postId         String?
+  reason         String
+  status         ReportStatus @default(OPEN)
+  createdAt      DateTime    @default(now())
+
+  reporter       User        @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User?       @relation("reportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+}
+
+model MediaAsset {
+  id             String   @id @default(cuid())
+  ownerId        String
+  url            String
+  mimeType       String
+  kind           String
+  createdAt      DateTime @default(now())
+
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}

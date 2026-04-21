@@ -32,10 +32,17 @@ The app currently includes polished flows for:
 Example markdown (once images are added):
 
 ```md
-![Home Feed](docs/screens/home.png)
-![Login](docs/screens/login.png)
-![Network](docs/screens/network.png)
-![Profile](docs/screens/profile.png)
+
+<img width="642" height="1389" alt="IMG_5843" src="https://github.com/user-attachments/assets/45901201-e5d7-4511-96d3-6c13831fe3a4" />
+<img width="642" height="1389" alt="IMG_5844" src="https://github.com/user-attachments/assets/ac24d573-61be-45c6-9c87-519b696744e8" />
+<img width="642" height="1389" alt="IMG_5842" src="https://github.com/user-attachments/assets/23ad80f2-f37a-4441-b4ea-a5268dab88c4" />
+<img width="642" height="1389" alt="IMG_5841" src="https://github.com/user-attachments/assets/2a665223-5347-4bbc-adac-b02a9f9bbe17" />
+
+
+
+
+
+
 ```
 
 ### Current Output Snapshot

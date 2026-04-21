@@ -31,7 +31,6 @@ The app currently includes polished flows for:
 
 Example markdown (once images are added):
 
-```md
 
 ## 📱 Demo Screenshots
 
@@ -40,10 +39,6 @@ Example markdown (once images are added):
 ![Screenshot 3](apps/mobile/assets/IMG_5843.PNG)
 ![Screenshot 4](apps/mobile/assets/IMG_5844.PNG)
 
-
-
-
-```
 
 ### Current Output Snapshot
 

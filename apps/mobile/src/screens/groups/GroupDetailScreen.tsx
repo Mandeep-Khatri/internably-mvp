@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Share, StyleSheet, Text, View } from 'react-native';
 import { colors, PostCard, spacing } from '@internably/ui/src';
 import { api } from '@/api/client';
 import ScreenContainer from '../shared/ScreenContainer';
@@ -16,6 +16,7 @@ type GroupPost = {
   id: string;
   content: string;
   createdAt?: string;
+  likedByMe?: boolean;
   author?: {
     id?: string;
     profile?: {
@@ -37,6 +38,7 @@ function postName(post: GroupPost) {
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = String(id);
+  const queryClient = useQueryClient();
 
   const detailQuery = useQuery<Group>({
     queryKey: ['group', groupId],
@@ -46,6 +48,32 @@ export default function GroupDetailScreen() {
   const postsQuery = useQuery<GroupPost[]>({
     queryKey: ['group-posts', groupId],
     queryFn: async () => (await api.get(`/groups/${groupId}/posts`)).data,
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: async (post: GroupPost) => {
+      if (post.likedByMe) await api.delete(`/posts/${post.id}/like`);
+      else await api.post(`/posts/${post.id}/like`);
+    },
+    onMutate: async (post) => {
+      await queryClient.cancelQueries({ queryKey: ['group-posts', groupId] });
+      const previous = queryClient.getQueryData<GroupPost[]>(['group-posts', groupId]);
+      queryClient.setQueryData<GroupPost[]>(['group-posts', groupId], (current = []) =>
+        current.map((item) => item.id === post.id ? {
+          ...item,
+          likedByMe: !item.likedByMe,
+          _count: {
+            ...item._count,
+            likes: Math.max(0, (item._count?.likes ?? 0) + (item.likedByMe ? -1 : 1)),
+          },
+        } : item),
+      );
+      return { previous };
+    },
+    onError: (_error, _post, context) => {
+      if (context?.previous) queryClient.setQueryData(['group-posts', groupId], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['group-posts', groupId] }),
   });
 
   return (
@@ -69,6 +97,11 @@ export default function GroupDetailScreen() {
             content={item.content}
             likes={item._count?.likes ?? 0}
             comments={item._count?.comments ?? 0}
+            liked={Boolean(item.likedByMe)}
+            likeDisabled={likeMutation.isPending && likeMutation.variables?.id === item.id}
+            onLike={() => likeMutation.mutate(item)}
+            onComment={() => router.push(`/posts/${item.id}`)}
+            onShare={() => Share.share({ message: `${postName(item)} on Internably:\n\n${item.content}` })}
             onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
             onPressPost={() => router.push(`/posts/${item.id}`)}
           />

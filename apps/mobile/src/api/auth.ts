@@ -20,6 +20,11 @@ export async function resendVerification(email: string) {
   return data as { message?: string; verificationLink?: string };
 }
 
+export async function forgotPassword(email: string) {
+  const { data } = await api.post('/auth/forgot-password', { email });
+  return data as { message?: string; token?: string };
+}
+
 export async function me() {
   const { data } = await api.get('/auth/me');
   return data;

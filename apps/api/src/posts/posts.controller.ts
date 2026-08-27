@@ -20,8 +20,8 @@ export class PostsController {
   }
 
   @Get(':id')
-  byId(@Param('id') id: string) {
-    return this.postsService.getById(id);
+  byId(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.postsService.getById(id, user.sub);
   }
 
   @Patch(':id')

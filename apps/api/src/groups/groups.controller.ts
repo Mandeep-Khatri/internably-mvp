@@ -40,7 +40,7 @@ export class GroupsController {
   }
 
   @Get(':id/posts')
-  posts(@Param('id') id: string) {
-    return this.groupsService.groupPosts(id);
+  posts(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    return this.groupsService.groupPosts(id, user.sub);
   }
 }

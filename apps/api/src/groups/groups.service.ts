@@ -73,14 +73,16 @@ export class GroupsService {
     });
   }
 
-  groupPosts(groupId: string) {
-    return this.prisma.post.findMany({
+  async groupPosts(groupId: string, userId: string) {
+    const posts = await this.prisma.post.findMany({
       where: { groupId },
       include: {
         author: { include: { profile: true } },
         _count: { select: { likes: true, comments: true } },
+        likes: { where: { userId }, select: { userId: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
+    return posts.map(({ likes, ...post }) => ({ ...post, likedByMe: likes.length > 0 }));
   }
 }

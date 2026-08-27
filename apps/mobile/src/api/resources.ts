@@ -4,6 +4,13 @@ export const ResourcesApi = {
   feed: async () => (await api.get('/posts/feed')).data,
   groups: async () => (await api.get('/groups')).data,
   connections: async () => (await api.get('/connections')).data,
+  incomingConnectionRequests: async () => (await api.get('/connections/requests/incoming')).data,
+  outgoingConnectionRequests: async () => (await api.get('/connections/requests/outgoing')).data,
+  requestConnection: async (userId: string) => (await api.post(`/connections/request/${userId}`)).data,
+  acceptConnectionRequest: async (requestId: string) =>
+    (await api.post(`/connections/accept/${requestId}`)).data,
+  declineConnectionRequest: async (requestId: string) =>
+    (await api.post(`/connections/decline/${requestId}`)).data,
   removeConnection: async (userId: string) => (await api.delete(`/connections/${userId}`)).data,
   blockUser: async (userId: string, reason: string) =>
     (await api.post(`/connections/block/${userId}`, { reason })).data,

@@ -7,17 +7,18 @@ type InputProps = TextInputProps & {
   error?: string;
 };
 
-export const Input = React.memo(function Input({
+export const Input = React.memo(React.forwardRef<TextInput, InputProps>(function Input({
   label,
   error,
   style,
   placeholderTextColor,
   ...props
-}: InputProps) {
+}, ref) {
   return (
     <View style={styles.wrap}>
       {!!label && <Text style={styles.label}>{label}</Text>}
       <TextInput
+        ref={ref}
         {...props}
         placeholderTextColor={placeholderTextColor ?? '#A9A49A'}
         style={[styles.input, style]}
@@ -25,7 +26,7 @@ export const Input = React.memo(function Input({
       {!!error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
-});
+}));
 
 const styles = StyleSheet.create({
   wrap: {

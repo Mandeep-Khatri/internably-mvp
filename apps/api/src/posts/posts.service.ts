@@ -23,7 +23,7 @@ export class PostsService {
     const memberships = await this.prisma.groupMember.findMany({ where: { userId }, select: { groupId: true } });
     const groupIds = memberships.map((m) => m.groupId);
 
-    return this.prisma.post.findMany({
+    const posts = await this.prisma.post.findMany({
       where: {
         OR: [
           { authorId: { in: [...connectedIds] } },
@@ -34,10 +34,12 @@ export class PostsService {
         author: { include: { profile: true } },
         group: true,
         _count: { select: { likes: true, comments: true } },
+        likes: { where: { userId }, select: { userId: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return posts.map(({ likes, ...post }) => ({ ...post, likedByMe: likes.length > 0 }));
   }
 
   create(userId: string, dto: CreatePostDto) {
@@ -55,14 +57,18 @@ export class PostsService {
     });
   }
 
-  getById(id: string) {
-    return this.prisma.post.findUnique({
+  async getById(id: string, userId: string) {
+    const post = await this.prisma.post.findUnique({
       where: { id },
       include: {
         author: { include: { profile: true } },
         _count: { select: { likes: true, comments: true } },
+        likes: { where: { userId }, select: { userId: true } },
       },
     });
+    if (!post) return null;
+    const { likes, ...result } = post;
+    return { ...result, likedByMe: likes.length > 0 };
   }
 
   async update(postId: string, userId: string, dto: UpdatePostDto) {

@@ -1,62 +1,27 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import * as AuthSession from 'expo-auth-session';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
 import { Button, Input, colors, spacing } from '@internably/ui/src';
-import { googleLogin, login, resendVerification } from '@/api/auth';
+import { forgotPassword, googleLogin, login, resendVerification } from '@/api/auth';
 import { useAuthStore } from '@/store/auth-store';
 import ScreenContainer from '../shared/ScreenContainer';
 import InternablyLogo from '../shared/InternablyLogo';
 
-type AuthSessionResult = {
-  type: 'success' | 'error' | 'cancel' | 'dismiss';
-  params?: { id_token?: string };
-  authentication?: { idToken?: string };
-};
-
-let GoogleProvider: {
-  useAuthRequest?: (
-    config: Record<string, string | undefined>,
-  ) => [
-    unknown,
-    AuthSessionResult | null,
-    (options?: Record<string, unknown>) => Promise<AuthSessionResult>,
-  ];
-  useIdTokenAuthRequest?: (
-    config: Record<string, string | undefined>,
-  ) => [
-    unknown,
-    AuthSessionResult | null,
-    (options?: Record<string, unknown>) => Promise<AuthSessionResult>,
-  ];
-} | null = null;
-
-let WebBrowserModule: { maybeCompleteAuthSession?: () => void } | null = null;
+type GoogleSignInModule = typeof import('react-native-nitro-google-signin');
+let GoogleNative: GoogleSignInModule | null = null;
 
 try {
+  // Keep Expo Go usable for email login even though it cannot load native Google Sign-In.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  GoogleProvider = require('expo-auth-session/providers/google');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  WebBrowserModule = require('expo-web-browser');
-  WebBrowserModule?.maybeCompleteAuthSession?.();
+  GoogleNative = require('react-native-nitro-google-signin');
 } catch {
-  // Google auth packages are optional during compile; runtime message guides installation.
+  // The native module is present in Internably development and production builds only.
 }
-
-const useGoogleIdTokenAuthRequest =
-  GoogleProvider?.useAuthRequest ??
-  GoogleProvider?.useIdTokenAuthRequest ??
-  ((_: Record<string, string | undefined>) =>
-    [null, null, async () => ({ type: 'error' as const })] as const satisfies [
-      unknown,
-      AuthSessionResult | null,
-      (options?: Record<string, unknown>) => Promise<AuthSessionResult>,
-    ]);
 
 const schema = z.object({
   email: z.string().min(1, 'Email or username is required'),
@@ -71,7 +36,7 @@ function resolveErrorMessage(error: unknown) {
     message?: string;
   };
   if (maybeAxiosError.message === 'Network Error') {
-    return 'Network error: cannot reach Internably API. Start backend on port 4000 and set EXPO_PUBLIC_API_URL to your Mac IP (example: http://10.0.0.243:4000/api).';
+    return 'Network error: cannot reach the Internably API. Check your internet connection and API configuration.';
   }
   const message = maybeAxiosError.response?.data?.message ?? maybeAxiosError.message;
   if (Array.isArray(message)) return message.join(', ');
@@ -84,48 +49,14 @@ export default function LoginScreen() {
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendLink, setResendLink] = useState<string | null>(null);
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-  const googleClientIds = useMemo(
-    () => ({
-      expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID,
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    }),
-    [],
-  );
-
-  const googleRedirectUri = useMemo(() => {
-    const envRedirect = process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI;
-    if (envRedirect) return envRedirect;
-    const username = process.env.EXPO_PUBLIC_EXPO_USERNAME;
-    if (!username) return undefined;
-    return `https://auth.expo.io/@${username}/internably-mobile`;
-  }, []);
-
-  const googleAuthConfig = useMemo(() => {
-    if (isExpoGo) {
-      return {
-        clientId: googleClientIds.webClientId,
-        webClientId: googleClientIds.webClientId,
-        responseType: 'id_token',
-      };
-    }
-    return {
-      ...googleClientIds,
-    };
-  }, [isExpoGo, googleClientIds, googleRedirectUri]);
-
-  const googleConfigured = Boolean(
-    (isExpoGo
-      ? googleClientIds.webClientId && googleRedirectUri
-      : googleClientIds.webClientId ||
-        googleClientIds.iosClientId ||
-        googleClientIds.androidClientId ||
-        googleClientIds.expoClientId),
-  );
-
-  const [request, response, promptAsync] = useGoogleIdTokenAuthRequest(googleAuthConfig);
+  const googleConfig = Constants.expoConfig?.extra as
+    | { googleWebClientId?: string; googleIosClientId?: string }
+    | undefined;
+  const googleWebClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || googleConfig?.googleWebClientId;
+  const googleIosClientId =
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || googleConfig?.googleIosClientId;
+  const googleConfigured = Boolean(googleWebClientId && googleIosClientId);
 
   const {
     control,
@@ -169,63 +100,80 @@ export default function LoginScreen() {
     },
   });
 
+  const forgotPasswordMutation = useMutation({
+    mutationFn: async (email: string) => forgotPassword(email),
+    onSuccess: (data) => {
+      setResendMessage(data.message ?? 'Password reset instructions sent.');
+      setResendLink(null);
+    },
+    onError: (error: unknown) => {
+      setResendMessage(resolveErrorMessage(error));
+      setResendLink(null);
+    },
+  });
+
   useEffect(() => {
-    if (!response) return;
-
-    if (response.type !== 'success') {
-      if (response.type === 'error') {
-        setGoogleError('Google sign-in failed. Please try again.');
-      }
-      return;
+    if (!isExpoGo && GoogleNative && googleWebClientId && googleIosClientId) {
+      GoogleNative.GoogleOneTapSignIn.configure({
+        webClientId: googleWebClientId,
+        iosClientId: googleIosClientId,
+        offlineAccess: false,
+        autoSelectOnSignIn: false,
+      });
     }
-
-    const idToken =
-      (response.params as { id_token?: string } | undefined)?.id_token ??
-      response.authentication?.idToken;
-
-    if (!idToken) {
-      setGoogleError('Google sign-in did not return an id token.');
-      return;
-    }
-    googleMutation.mutate(idToken);
-  }, [response]);
+  }, [googleIosClientId, googleWebClientId, isExpoGo]);
 
   async function handleGoogleLogin() {
     setGoogleError(null);
-    if (!GoogleProvider?.useIdTokenAuthRequest) {
+    if (isExpoGo) {
       setGoogleError(
-        'Google auth packages are missing. Run: npx expo install expo-auth-session expo-web-browser',
+        'Google login requires the Internably development build. It cannot run inside Expo Go.',
+      );
+      return;
+    }
+    if (!GoogleNative) {
+      setGoogleError(
+        'This build does not include native Google login. Install the newest Internably development build.',
       );
       return;
     }
     if (!googleConfigured) {
-      setGoogleError(
-        'Google login is not configured. In Expo Go set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and EXPO_PUBLIC_GOOGLE_REDIRECT_URI=https://auth.expo.io/@YOUR_EXPO_USERNAME/internably-mobile.',
-      );
+      setGoogleError('Google login is missing its Web or iOS OAuth client ID.');
       return;
     }
 
-    if (isExpoGo) {
-      if (!request || !googleRedirectUri || !(request as { url?: string }).url) {
-        setGoogleError('Google auth request not ready yet. Please try again.');
+    try {
+      await GoogleNative.GoogleOneTapSignIn.checkPlayServices();
+      let response = await GoogleNative.GoogleOneTapSignIn.signIn();
+
+      if (GoogleNative.isNoSavedCredentialFoundResponse(response)) {
+        response = await GoogleNative.GoogleOneTapSignIn.createAccount();
+      }
+      if (GoogleNative.isNoSavedCredentialFoundResponse(response)) {
+        response = await GoogleNative.GoogleOneTapSignIn.presentExplicitSignIn();
+      }
+      if (GoogleNative.isCancelledResponse(response)) return;
+
+      if (!GoogleNative.isSuccessResponse(response) || !response.data.idToken) {
+        setGoogleError('Google sign-in did not return an ID token.');
         return;
       }
 
-      const requestUrl = (request as { url: string; redirectUri: string }).url;
-      const returnUrl = (request as { url: string; redirectUri: string }).redirectUri;
-
-      const authUrl = new URL(requestUrl);
-      authUrl.searchParams.set('redirect_uri', googleRedirectUri);
-
-      const startUrl =
-        `${googleRedirectUri}/start?authUrl=${encodeURIComponent(authUrl.toString())}` +
-        `&returnUrl=${encodeURIComponent(returnUrl)}`;
-
-      await promptAsync({ url: startUrl } as unknown as Record<string, unknown>);
-      return;
+      googleMutation.mutate(response.data.idToken);
+    } catch (error) {
+      if (GoogleNative.isErrorWithCode(error)) {
+        if (error.code === GoogleNative.statusCodes.SIGN_IN_CANCELLED) return;
+        if (error.code === GoogleNative.statusCodes.DEVELOPER_ERROR) {
+          setGoogleError(
+            'Google rejected this app configuration. Check the OAuth client IDs and signing certificate.',
+          );
+          return;
+        }
+        setGoogleError(error.message || 'Google sign-in failed. Please try again.');
+        return;
+      }
+      setGoogleError(resolveErrorMessage(error));
     }
-
-    await promptAsync();
   }
 
   function handleResendVerification() {
@@ -237,6 +185,17 @@ export default function LoginScreen() {
       return;
     }
     resendMutation.mutate(email);
+  }
+
+  function handleForgotPassword() {
+    setResendMessage(null);
+    setResendLink(null);
+    const email = getValues('email')?.trim();
+    if (!email) {
+      setResendMessage('Enter your email first, then tap Forgot password.');
+      return;
+    }
+    forgotPasswordMutation.mutate(email);
   }
 
   return (
@@ -283,8 +242,10 @@ export default function LoginScreen() {
       />
 
       <View style={styles.linksRow}>
-        <Pressable onPress={() => {}} style={styles.forgotWrap}>
-          <Text style={styles.forgot}>Forgot password?</Text>
+        <Pressable onPress={handleForgotPassword} style={styles.forgotWrap}>
+          <Text style={styles.forgot}>
+            {forgotPasswordMutation.isPending ? 'Sending...' : 'Forgot password?'}
+          </Text>
         </Pressable>
         <Pressable onPress={handleResendVerification} style={styles.resendWrap}>
           <Text style={styles.resend}>
@@ -308,9 +269,9 @@ export default function LoginScreen() {
       )}
 
       <Pressable
-        style={[styles.social, (!request || googleMutation.isPending) && styles.socialDisabled]}
+        style={[styles.social, googleMutation.isPending && styles.socialDisabled]}
         onPress={handleGoogleLogin}
-        disabled={!request || googleMutation.isPending}
+        disabled={googleMutation.isPending}
       >
         <Text style={styles.socialIcon}>G</Text>
         <Text style={styles.socialText}>

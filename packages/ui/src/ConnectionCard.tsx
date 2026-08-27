@@ -9,6 +9,9 @@ type ConnectionCardProps = {
   mutualText?: string;
   avatarUrl?: string | null;
   onConnect?: () => void;
+  connectLabel?: string;
+  connectDisabled?: boolean;
+  connectVariant?: 'default' | 'success';
   onDismiss?: () => void;
   onPress?: () => void;
 };
@@ -19,6 +22,9 @@ export const ConnectionCard = React.memo(function ConnectionCard({
   mutualText,
   avatarUrl,
   onConnect,
+  connectLabel = 'Connect',
+  connectDisabled = false,
+  connectVariant = 'default',
   onDismiss,
   onPress,
 }: ConnectionCardProps) {
@@ -39,8 +45,14 @@ export const ConnectionCard = React.memo(function ConnectionCard({
       <Text numberOfLines={1} style={styles.name}>{name}</Text>
       {!!headline && <Text numberOfLines={2} style={styles.headline}>{headline}</Text>}
       {!!mutualText && <Text numberOfLines={2} style={styles.mutual}>{mutualText}</Text>}
-      <Pressable onPress={onConnect} style={styles.connectBtn}>
-        <Text style={styles.connectText}>Connect</Text>
+      <Pressable
+        disabled={connectDisabled}
+        onPress={onConnect}
+        style={[styles.connectBtn, connectVariant === 'success' && styles.connectBtnSuccess]}
+      >
+        <Text style={[styles.connectText, connectVariant === 'success' && styles.connectTextSuccess]}>
+          {connectLabel}
+        </Text>
       </Pressable>
     </CardWrapper>
   );
@@ -108,5 +120,12 @@ const styles = StyleSheet.create({
   connectText: {
     color: '#2B7BC6',
     ...typography.button,
+  },
+  connectBtnSuccess: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  connectTextSuccess: {
+    color: '#FFFFFF',
   },
 });

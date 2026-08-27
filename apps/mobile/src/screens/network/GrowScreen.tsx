@@ -2,9 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ConnectionCard, colors, spacing, typography } from '@internably/ui/src';
-import { api } from '@/api/client';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Avatar, ConnectionCard, colors, spacing, typography } from '@internably/ui/src';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 
@@ -26,6 +25,14 @@ type Group = {
   type?: string;
   description?: string;
   _count?: { members?: number };
+};
+
+type ConnectionRequest = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  fromUser?: SuggestedUser;
+  toUser?: SuggestedUser;
 };
 
 function userName(user: SuggestedUser) {
@@ -56,14 +63,84 @@ export default function GrowScreen() {
     queryFn: ResourcesApi.groups,
   });
 
+  const outgoingQuery = useQuery<ConnectionRequest[]>({
+    queryKey: ['connection-requests', 'outgoing'],
+    queryFn: ResourcesApi.outgoingConnectionRequests,
+  });
+
+  const incomingQuery = useQuery<ConnectionRequest[]>({
+    queryKey: ['connection-requests', 'incoming'],
+    queryFn: ResourcesApi.incomingConnectionRequests,
+  });
+
   const connectMutation = useMutation({
-    mutationFn: async (userId: string) => api.post(`/connections/request/${userId}`),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['connections'] });
+    mutationFn: ResourcesApi.requestConnection,
+    onMutate: async (userId) => {
+      await qc.cancelQueries({ queryKey: ['connection-requests', 'outgoing'] });
+      const previous = qc.getQueryData<ConnectionRequest[]>(['connection-requests', 'outgoing']);
+      const toUser = suggestionsQuery.data?.find((user) => user.id === userId);
+      qc.setQueryData<ConnectionRequest[]>(['connection-requests', 'outgoing'], (current = []) => [
+        ...current,
+        {
+          id: `pending-${userId}`,
+          fromUserId: '',
+          toUserId: userId,
+          toUser,
+        },
+      ]);
+      return { previous };
+    },
+    onError: (_error, _userId, context) => {
+      qc.setQueryData(['connection-requests', 'outgoing'], context?.previous ?? []);
+      Alert.alert('Unable to connect', 'Please check your network and try again.');
+    },
+    onSettled: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['suggestions'] }),
+        qc.invalidateQueries({ queryKey: ['connection-requests', 'outgoing'] }),
+      ]);
     },
   });
 
-  const suggestions = suggestionsQuery.data ?? [];
+  const respondMutation = useMutation({
+    mutationFn: ({ requestId, action }: { requestId: string; action: 'accept' | 'decline' }) =>
+      action === 'accept'
+        ? ResourcesApi.acceptConnectionRequest(requestId)
+        : ResourcesApi.declineConnectionRequest(requestId),
+    onMutate: async ({ requestId }) => {
+      await qc.cancelQueries({ queryKey: ['connection-requests', 'incoming'] });
+      const previous = qc.getQueryData<ConnectionRequest[]>(['connection-requests', 'incoming']);
+      qc.setQueryData<ConnectionRequest[]>(['connection-requests', 'incoming'], (current = []) =>
+        current.filter((request) => request.id !== requestId),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      qc.setQueryData(['connection-requests', 'incoming'], context?.previous ?? []);
+      Alert.alert('Unable to update request', 'Please check your network and try again.');
+    },
+    onSettled: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['connection-requests', 'incoming'] }),
+        qc.invalidateQueries({ queryKey: ['connections'] }),
+        qc.invalidateQueries({ queryKey: ['suggestions'] }),
+      ]);
+    },
+  });
+
+  const outgoing = outgoingQuery.data ?? [];
+  const outgoingUserIds = useMemo(() => new Set(outgoing.map((request) => request.toUserId)), [outgoing]);
+  const suggestions = useMemo(() => {
+    const users = [...(suggestionsQuery.data ?? [])];
+    const ids = new Set(users.map((user) => user.id));
+    for (const request of outgoing) {
+      if (request.toUser && !ids.has(request.toUser.id)) {
+        users.push(request.toUser);
+        ids.add(request.toUser.id);
+      }
+    }
+    return users;
+  }, [suggestionsQuery.data, outgoing]);
   const filteredSuggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return suggestions;
@@ -112,14 +189,22 @@ export default function GrowScreen() {
           columnWrapperStyle={styles.column}
           renderItem={({ item }) => (
             <View style={styles.cardCol}>
-              <ConnectionCard
-                name={userName(item)}
-                headline={userHeadline(item)}
-                mutualText="Mutual peers in your network"
-                avatarUrl={item.profile?.avatarUrl ?? null}
-                onConnect={() => connectMutation.mutate(item.id)}
-                onPress={() => router.push(`/profile/${item.id}`)}
-              />
+              {(() => {
+                const requested = outgoingUserIds.has(item.id);
+                return (
+                  <ConnectionCard
+                    name={userName(item)}
+                    headline={userHeadline(item)}
+                    mutualText="Mutual peers in your network"
+                    avatarUrl={item.profile?.avatarUrl ?? null}
+                    onConnect={() => !requested && connectMutation.mutate(item.id)}
+                    connectLabel={requested ? 'Requested' : 'Connect'}
+                    connectDisabled={requested}
+                    connectVariant={requested ? 'success' : 'default'}
+                    onPress={() => router.push(`/profile/${item.id}`)}
+                  />
+                );
+              })()}
             </View>
           )}
           ListHeaderComponent={
@@ -129,17 +214,55 @@ export default function GrowScreen() {
       ) : (
         <FlatList
           key="checkin-list"
-          data={groupsQuery.data ?? []}
+          data={incomingQuery.data ?? []}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.groupContent}
-          renderItem={({ item }) => (
-            <Pressable style={styles.groupCard} onPress={() => router.push(`/groups/${item.id}`)}>
-              <Text style={styles.groupName}>{item.name}</Text>
-              <Text style={styles.groupMeta}>{item.type ?? 'Group'} · {item._count?.members ?? 0} members</Text>
-              {!!item.description && <Text numberOfLines={2} style={styles.groupDesc}>{item.description}</Text>}
-            </Pressable>
-          )}
-          ListHeaderComponent={<Text style={styles.sectionTitle}>Communities to catch up with</Text>}
+          renderItem={({ item }) => {
+            const responding = respondMutation.isPending && respondMutation.variables?.requestId === item.id;
+            return (
+            <View style={styles.requestCard}>
+              <Pressable style={styles.requestPerson} onPress={() => router.push(`/profile/${item.fromUserId}`)}>
+                <Avatar name={userName(item.fromUser ?? { id: item.fromUserId })} uri={item.fromUser?.profile?.avatarUrl} size={58} />
+                <View style={styles.requestCopy}>
+                  <Text numberOfLines={1} style={styles.requestName}>{userName(item.fromUser ?? { id: item.fromUserId })}</Text>
+                  <Text numberOfLines={2} style={styles.requestHeadline}>{userHeadline(item.fromUser ?? { id: item.fromUserId })}</Text>
+                </View>
+              </Pressable>
+              <View style={styles.requestActions}>
+                <Pressable
+                  disabled={responding}
+                  onPress={() => respondMutation.mutate({ requestId: item.id, action: 'accept' })}
+                  style={[styles.acceptBtn, responding && styles.disabledBtn]}
+                >
+                  <Text style={styles.acceptText}>Accept</Text>
+                </Pressable>
+                <Pressable
+                  disabled={responding}
+                  onPress={() => respondMutation.mutate({ requestId: item.id, action: 'decline' })}
+                  style={[styles.denyBtn, responding && styles.disabledBtn]}
+                >
+                  <Text style={styles.denyText}>Deny</Text>
+                </Pressable>
+              </View>
+            </View>
+            );
+          }}
+          ListHeaderComponent={<Text style={styles.sectionTitle}>Connection requests</Text>}
+          ListEmptyComponent={incomingQuery.isLoading
+            ? <ActivityIndicator color={colors.primary} />
+            : <Text style={styles.emptyText}>No new connection requests.</Text>}
+          ListFooterComponent={
+            <View style={styles.communitiesSection}>
+              <Text style={styles.sectionTitle}>Communities to catch up with</Text>
+              {(groupsQuery.data ?? []).map((group) => (
+                <Pressable key={group.id} style={styles.groupCard} onPress={() => router.push(`/groups/${group.id}`)}>
+                  <Text style={styles.groupName}>{group.name}</Text>
+                  <Text style={styles.groupMeta}>{group.type ?? 'Group'} · {group._count?.members ?? 0} members</Text>
+                  {!!group.description && <Text numberOfLines={2} style={styles.groupDesc}>{group.description}</Text>}
+                </Pressable>
+              ))}
+            </View>
+          }
         />
       )}
     </ScreenContainer>
@@ -236,6 +359,73 @@ const styles = StyleSheet.create({
   groupContent: {
     padding: spacing.md,
     paddingBottom: 110,
+  },
+  requestCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E0D6',
+    borderRadius: 16,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  requestPerson: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  requestCopy: {
+    flex: 1,
+  },
+  requestName: {
+    color: colors.text,
+    ...typography.subtitle,
+    fontWeight: '600',
+  },
+  requestHeadline: {
+    color: '#6B655F',
+    ...typography.secondary,
+    marginTop: 2,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  acceptBtn: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  acceptText: {
+    color: '#FFFFFF',
+    ...typography.button,
+  },
+  denyBtn: {
+    flex: 1,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#9B2C2C',
+  },
+  denyText: {
+    color: '#9B2C2C',
+    ...typography.button,
+  },
+  disabledBtn: {
+    opacity: 0.55,
+  },
+  emptyText: {
+    color: colors.muted,
+    ...typography.body,
+    marginBottom: spacing.lg,
+  },
+  communitiesSection: {
+    marginTop: spacing.lg,
   },
   groupCard: {
     backgroundColor: '#FFFFFF',

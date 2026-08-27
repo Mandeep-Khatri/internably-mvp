@@ -12,6 +12,8 @@ export type PostCardProps = {
   imageUrl?: string | null;
   likes?: number;
   comments?: number;
+  liked?: boolean;
+  likeDisabled?: boolean;
   onLike?: () => void;
   onComment?: () => void;
   onShare?: () => void;
@@ -34,6 +36,8 @@ export const PostCard = React.memo(function PostCard({
   imageUrl,
   likes = 0,
   comments = 0,
+  liked = false,
+  likeDisabled = false,
   onLike,
   onComment,
   onShare,
@@ -65,13 +69,17 @@ export const PostCard = React.memo(function PostCard({
       </View>
 
       <View style={styles.actionsRow}>
-        <Pressable onPress={onLike} style={styles.actionBtn}>
-          <Text style={styles.actionText}>Like</Text>
+        <Pressable
+          disabled={!onLike || likeDisabled}
+          onPress={onLike}
+          style={[styles.actionBtn, liked && styles.likedBtn, likeDisabled && styles.disabledAction]}
+        >
+          <Text style={[styles.actionText, liked && styles.likedText]}>Like</Text>
         </Pressable>
-        <Pressable onPress={onComment} style={styles.actionBtn}>
+        <Pressable disabled={!onComment} onPress={onComment} style={styles.actionBtn}>
           <Text style={styles.actionText}>Comment</Text>
         </Pressable>
-        <Pressable onPress={onShare} style={styles.actionBtn}>
+        <Pressable disabled={!onShare} onPress={onShare} style={styles.actionBtn}>
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
       </View>
@@ -148,5 +156,15 @@ const styles = StyleSheet.create({
     color: colors.text,
     ...typography.secondary,
     fontWeight: '600',
+  },
+  likedBtn: {
+    backgroundColor: '#E7F6EA',
+    borderRadius: radius.pill,
+  },
+  likedText: {
+    color: colors.primary,
+  },
+  disabledAction: {
+    opacity: 0.55,
   },
 });

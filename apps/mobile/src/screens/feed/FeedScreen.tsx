@@ -107,6 +107,24 @@ export default function FeedScreen() {
         await api.post(`/posts/${post.id}/like`);
       }
     },
+    onMutate: async (post) => {
+      await queryClient.cancelQueries({ queryKey: ['feed'] });
+      const previous = queryClient.getQueryData<FeedPost[]>(['feed']);
+      queryClient.setQueryData<FeedPost[]>(['feed'], (current = []) =>
+        current.map((item) => item.id === post.id ? {
+          ...item,
+          likedByMe: !item.likedByMe,
+          _count: {
+            ...item._count,
+            likes: Math.max(0, (item._count?.likes ?? 0) + (item.likedByMe ? -1 : 1)),
+          },
+        } : item),
+      );
+      return { previous };
+    },
+    onError: (_error, _post, context) => {
+      if (context?.previous) queryClient.setQueryData(['feed'], context.previous);
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
@@ -151,6 +169,8 @@ export default function FeedScreen() {
             imageUrl={item.imageUrl ?? null}
             likes={item._count?.likes ?? 0}
             comments={item._count?.comments ?? 0}
+            liked={Boolean(item.likedByMe)}
+            likeDisabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.id === item.id}
             onLike={() => toggleLikeMutation.mutate(item)}
             onComment={() => router.push(`/posts/${item.id}`)}
             onShare={() => Share.share({ message: `${postAuthorName(item)} on Internably:\n\n${item.content}` })}

@@ -4,7 +4,6 @@ import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Alert, FlatList, Image, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, spacing, typography } from '@internably/ui/src';
-import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 
@@ -30,6 +29,13 @@ type UserProfileResponse = {
   };
 };
 
+type OutgoingConnectionRequest = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  toUser?: UserProfileResponse;
+};
+
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = String(id);
@@ -48,18 +54,39 @@ export default function UserProfileScreen() {
     queryKey: ['connections'],
     queryFn: ResourcesApi.connections,
   });
+  const outgoingQuery = useQuery<OutgoingConnectionRequest[]>({
+    queryKey: ['connection-requests', 'outgoing'],
+    queryFn: ResourcesApi.outgoingConnectionRequests,
+  });
 
   const connectMutation = useMutation({
-    mutationFn: async () => api.post(`/connections/request/${userId}`),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['connections'] });
-      Alert.alert('Request sent', 'Your connection request was sent.');
+    mutationFn: async () => ResourcesApi.requestConnection(userId),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['connection-requests', 'outgoing'] });
+      const previous = qc.getQueryData<OutgoingConnectionRequest[]>(['connection-requests', 'outgoing']);
+      qc.setQueryData<OutgoingConnectionRequest[]>(['connection-requests', 'outgoing'], (current = []) => [
+        ...current,
+        {
+          id: `pending-${userId}`,
+          fromUserId: '',
+          toUserId: userId,
+          toUser: userQuery.data,
+        },
+      ]);
+      return { previous };
     },
-    onError: (error: unknown) => {
+    onError: (error: unknown, _variables, context) => {
+      qc.setQueryData(['connection-requests', 'outgoing'], context?.previous ?? []);
       const maybeAxiosError = error as { response?: { data?: { message?: string | string[] } }; message?: string };
       const message = maybeAxiosError.response?.data?.message ?? maybeAxiosError.message;
       const text = Array.isArray(message) ? message.join(', ') : message ?? 'Please try again.';
       Alert.alert('Unable to connect', text);
+    },
+    onSettled: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['connection-requests', 'outgoing'] }),
+        qc.invalidateQueries({ queryKey: ['suggestions'] }),
+      ]);
     },
   });
   const removeMutation = useMutation({
@@ -140,6 +167,7 @@ export default function UserProfileScreen() {
   const isConnected = connections.some(
     (edge) => edge.userAId === userId || edge.userBId === userId || edge.userA?.id === userId || edge.userB?.id === userId,
   );
+  const isRequested = (outgoingQuery.data ?? []).some((request) => request.toUserId === userId);
   const peersCount =
     typeof (userQuery.data as any)?.connectionsCount === 'number'
       ? (userQuery.data as any)?.connectionsCount
@@ -276,11 +304,19 @@ export default function UserProfileScreen() {
 
               <Pressable
                 onPress={() => connectMutation.mutate()}
-                disabled={isConnected || connectMutation.isPending}
-                style={[styles.connectBtn, isConnected && styles.connectBtnDisabled]}
+                disabled={isConnected || isRequested}
+                style={[
+                  styles.connectBtn,
+                  isConnected && styles.connectBtnDisabled,
+                  isRequested && styles.connectBtnRequested,
+                ]}
               >
-                <Text style={[styles.connectText, isConnected && styles.connectTextDisabled]}>
-                  {isConnected ? 'Connected' : connectMutation.isPending ? 'Connecting...' : 'Connect'}
+                <Text style={[
+                  styles.connectText,
+                  isConnected && styles.connectTextDisabled,
+                  isRequested && styles.connectTextRequested,
+                ]}>
+                  {isConnected ? 'Connected' : isRequested ? 'Requested' : 'Connect'}
                 </Text>
               </Pressable>
             </View>
@@ -529,12 +565,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#E4E0D6',
     borderColor: '#D7D1C6',
   },
+  connectBtnRequested: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
   connectText: {
     color: '#111111',
     ...typography.button,
   },
   connectTextDisabled: {
     color: '#6A655F',
+  },
+  connectTextRequested: {
+    color: '#FFFFFF',
   },
   blockBackdrop: {
     flex: 1,

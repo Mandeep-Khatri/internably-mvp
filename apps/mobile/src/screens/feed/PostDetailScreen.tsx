@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Alert, FlatList, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Input, PostCard, colors, spacing, typography } from '@internably/ui/src';
 import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
@@ -12,6 +12,7 @@ type PostDetail = {
   content: string;
   createdAt?: string;
   imageUrl?: string | null;
+  likedByMe?: boolean;
   author?: {
     id?: string;
     profile?: {
@@ -41,6 +42,7 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const postId = String(id);
   const [comment, setComment] = useState('');
+  const commentInputRef = useRef<TextInput>(null);
   const queryClient = useQueryClient();
 
   const postQuery = useQuery<PostDetail>({
@@ -58,9 +60,20 @@ export default function PostDetailScreen() {
   });
 
   const commentMutation = useMutation({
-    mutationFn: async () => api.post(`/posts/${postId}/comments`, { content: comment.trim() }),
-    onSuccess: async () => {
+    mutationFn: async () => (await api.post(`/posts/${postId}/comments`, { content: comment.trim() })).data as Comment,
+    onSuccess: async (createdComment) => {
       setComment('');
+      queryClient.setQueryData<Comment[]>(['post-comments', postId], (current = []) => [
+        ...current,
+        createdComment,
+      ]);
+      queryClient.setQueryData<PostDetail>(['post', postId], (current) => current ? {
+        ...current,
+        _count: {
+          ...current._count,
+          comments: (current._count?.comments ?? 0) + 1,
+        },
+      } : current);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['post-comments', postId] }),
         queryClient.invalidateQueries({ queryKey: ['post', postId] }),
@@ -68,6 +81,35 @@ export default function PostDetailScreen() {
       ]);
     },
     onError: () => Alert.alert('Unable to comment', 'Please try again.'),
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      if (post?.likedByMe) await api.delete(`/posts/${postId}/like`);
+      else await api.post(`/posts/${postId}/like`);
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['post', postId] });
+      const previous = queryClient.getQueryData<PostDetail>(['post', postId]);
+      queryClient.setQueryData<PostDetail>(['post', postId], (current) => current ? {
+        ...current,
+        likedByMe: !current.likedByMe,
+        _count: {
+          ...current._count,
+          likes: Math.max(0, (current._count?.likes ?? 0) + (current.likedByMe ? -1 : 1)),
+        },
+      } : current);
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(['post', postId], context.previous);
+    },
+    onSettled: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['post', postId] }),
+        queryClient.invalidateQueries({ queryKey: ['feed'] }),
+      ]);
+    },
   });
 
   return (
@@ -91,11 +133,16 @@ export default function PostDetailScreen() {
                 imageUrl={post.imageUrl ?? null}
                 likes={post._count?.likes ?? 0}
                 comments={post._count?.comments ?? 0}
+                liked={Boolean(post.likedByMe)}
+                likeDisabled={likeMutation.isPending}
+                onLike={() => likeMutation.mutate()}
+                onComment={() => commentInputRef.current?.focus()}
+                onShare={() => Share.share({ message: `${postAuthorName(post)} on Internably:\n\n${post.content}` })}
               />
             )}
             <Text style={styles.commentsTitle}>Comments</Text>
             <View style={styles.composer}>
-              <Input placeholder="Write a comment" value={comment} onChangeText={setComment} multiline />
+              <Input ref={commentInputRef} placeholder="Write a comment" value={comment} onChangeText={setComment} multiline />
               <Button
                 title={commentMutation.isPending ? 'Posting…' : 'Comment'}
                 onPress={() => commentMutation.mutate()}

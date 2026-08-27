@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { PostCard, colors, spacing, typography } from '@internably/ui/src';
+import React, { useState } from 'react';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Button, Input, PostCard, colors, spacing, typography } from '@internably/ui/src';
+import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 
@@ -23,6 +24,12 @@ type PostDetail = {
   _count?: { likes?: number; comments?: number };
 };
 
+type Comment = {
+  id: string;
+  content: string;
+  author?: { profile?: { firstName?: string | null; lastName?: string | null } };
+};
+
 function postAuthorName(post?: PostDetail | null) {
   const first = post?.author?.profile?.firstName?.trim() ?? '';
   const last = post?.author?.profile?.lastName?.trim() ?? '';
@@ -33,6 +40,8 @@ function postAuthorName(post?: PostDetail | null) {
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const postId = String(id);
+  const [comment, setComment] = useState('');
+  const queryClient = useQueryClient();
 
   const postQuery = useQuery<PostDetail>({
     queryKey: ['post', postId],
@@ -42,23 +51,73 @@ export default function PostDetailScreen() {
 
   const post = postQuery.data;
 
+  const commentsQuery = useQuery<Comment[]>({
+    queryKey: ['post-comments', postId],
+    queryFn: async () => (await api.get(`/posts/${postId}/comments`)).data,
+    enabled: Boolean(postId),
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async () => api.post(`/posts/${postId}/comments`, { content: comment.trim() }),
+    onSuccess: async () => {
+      setComment('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['post-comments', postId] }),
+        queryClient.invalidateQueries({ queryKey: ['post', postId] }),
+        queryClient.invalidateQueries({ queryKey: ['feed'] }),
+      ]);
+    },
+    onError: () => Alert.alert('Unable to comment', 'Please try again.'),
+  });
+
   return (
-    <ScreenContainer>
-      <Text style={styles.title}>Post</Text>
-      {!post ? (
-        <Text style={styles.loading}>Loading post…</Text>
-      ) : (
-        <PostCard
-          authorName={postAuthorName(post)}
-          subtitle={post.author?.profile?.headline ?? 'Internably member'}
-          timestamp={post.createdAt ? new Date(post.createdAt).toLocaleDateString() : undefined}
-          avatarUrl={post.author?.profile?.avatarUrl ?? null}
-          content={post.content}
-          imageUrl={post.imageUrl ?? null}
-          likes={post._count?.likes ?? 0}
-          comments={post._count?.comments ?? 0}
-        />
-      )}
+    <ScreenContainer scroll={false}>
+      <FlatList
+        data={commentsQuery.data ?? []}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View>
+            <Text style={styles.title}>Post</Text>
+            {!post ? (
+              <Text style={styles.loading}>{postQuery.isError ? 'Unable to load post.' : 'Loading post…'}</Text>
+            ) : (
+              <PostCard
+                authorName={postAuthorName(post)}
+                subtitle={post.author?.profile?.headline ?? 'Internably member'}
+                timestamp={post.createdAt ? new Date(post.createdAt).toLocaleDateString() : undefined}
+                avatarUrl={post.author?.profile?.avatarUrl ?? null}
+                content={post.content}
+                imageUrl={post.imageUrl ?? null}
+                likes={post._count?.likes ?? 0}
+                comments={post._count?.comments ?? 0}
+              />
+            )}
+            <Text style={styles.commentsTitle}>Comments</Text>
+            <View style={styles.composer}>
+              <Input placeholder="Write a comment" value={comment} onChangeText={setComment} multiline />
+              <Button
+                title={commentMutation.isPending ? 'Posting…' : 'Comment'}
+                onPress={() => commentMutation.mutate()}
+                disabled={!comment.trim() || commentMutation.isPending}
+              />
+            </View>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const first = item.author?.profile?.firstName ?? '';
+          const last = item.author?.profile?.lastName ?? '';
+          return (
+            <View style={styles.commentCard}>
+              <Text style={styles.commentAuthor}>{`${first} ${last}`.trim() || 'Internably Member'}</Text>
+              <Text style={styles.commentText}>{item.content}</Text>
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          commentsQuery.isLoading ? <Text style={styles.loading}>Loading comments…</Text> : <Text style={styles.loading}>No comments yet.</Text>
+        }
+      />
     </ScreenContainer>
   );
 }
@@ -72,5 +131,35 @@ const styles = StyleSheet.create({
   loading: {
     color: '#6B655F',
     ...typography.secondary,
+  },
+  content: {
+    padding: spacing.md,
+    paddingBottom: 80,
+  },
+  commentsTitle: {
+    color: colors.text,
+    ...typography.sectionHeader,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  composer: {
+    marginBottom: spacing.md,
+  },
+  commentCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E0D6',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  commentAuthor: {
+    color: colors.text,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  commentText: {
+    color: colors.text,
+    ...typography.body,
   },
 });

@@ -10,6 +10,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -151,8 +152,8 @@ export default function FeedScreen() {
             likes={item._count?.likes ?? 0}
             comments={item._count?.comments ?? 0}
             onLike={() => toggleLikeMutation.mutate(item)}
-            onComment={() => Alert.alert('Comments', 'Comment UI is available in API and will open here.')}
-            onShare={() => Alert.alert('Share', 'Share action will be connected next.')}
+            onComment={() => router.push(`/posts/${item.id}`)}
+            onShare={() => Share.share({ message: `${postAuthorName(item)} on Internably:\n\n${item.content}` })}
             onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
             onPressPost={() => router.push(`/posts/${item.id}`)}
           />

@@ -64,7 +64,7 @@ export default function EditProfileScreen() {
               }
               return '';
             })
-            .filter((value) => Boolean(value))
+            .filter((value: string) => Boolean(value))
             .join(', ')
         : '',
       portfolioUrl: profile.linkedinUrl ?? '',

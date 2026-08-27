@@ -8,7 +8,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
 import { Button, Input, colors, spacing } from '@internably/ui/src';
-import { googleLogin, login, resendVerification } from '@/api/auth';
+import { forgotPassword, googleLogin, login, resendVerification } from '@/api/auth';
 import { useAuthStore } from '@/store/auth-store';
 import ScreenContainer from '../shared/ScreenContainer';
 import InternablyLogo from '../shared/InternablyLogo';
@@ -169,6 +169,18 @@ export default function LoginScreen() {
     },
   });
 
+  const forgotPasswordMutation = useMutation({
+    mutationFn: async (email: string) => forgotPassword(email),
+    onSuccess: (data) => {
+      setResendMessage(data.message ?? 'Password reset instructions sent.');
+      setResendLink(null);
+    },
+    onError: (error: unknown) => {
+      setResendMessage(resolveErrorMessage(error));
+      setResendLink(null);
+    },
+  });
+
   useEffect(() => {
     if (!response) return;
 
@@ -239,6 +251,17 @@ export default function LoginScreen() {
     resendMutation.mutate(email);
   }
 
+  function handleForgotPassword() {
+    setResendMessage(null);
+    setResendLink(null);
+    const email = getValues('email')?.trim();
+    if (!email) {
+      setResendMessage('Enter your email first, then tap Forgot password.');
+      return;
+    }
+    forgotPasswordMutation.mutate(email);
+  }
+
   return (
     <ScreenContainer>
       <View style={styles.topRow}>
@@ -283,8 +306,10 @@ export default function LoginScreen() {
       />
 
       <View style={styles.linksRow}>
-        <Pressable onPress={() => {}} style={styles.forgotWrap}>
-          <Text style={styles.forgot}>Forgot password?</Text>
+        <Pressable onPress={handleForgotPassword} style={styles.forgotWrap}>
+          <Text style={styles.forgot}>
+            {forgotPasswordMutation.isPending ? 'Sending...' : 'Forgot password?'}
+          </Text>
         </Pressable>
         <Pressable onPress={handleResendVerification} style={styles.resendWrap}>
           <Text style={styles.resend}>

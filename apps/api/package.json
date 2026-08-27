@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch -p tsconfig.build.json",
     "lint": "eslint .",
-    "test": "jest",
+    "test": "jest --config jest.config.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts"

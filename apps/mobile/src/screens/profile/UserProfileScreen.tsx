@@ -226,6 +226,7 @@ export default function UserProfileScreen() {
 
       <FlatList
         data={[]}
+        renderItem={() => null}
         keyExtractor={(_, i) => `${i}`}
         contentContainerStyle={styles.content}
         ListHeaderComponent={

@@ -11,6 +11,7 @@ import { MessagesModule } from './messages/messages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { MediaModule } from './media/media.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -27,5 +28,6 @@ import { MediaModule } from './media/media.module';
     AdminModule,
     MediaModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule {}

@@ -2,7 +2,6 @@
   "expo": {
     "name": "Internably",
     "slug": "internably-mobile",
-    "entryPoint": "./node_modules/expo-router/entry",
     "scheme": "internably",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,10 +11,18 @@
       "backgroundColor": "#F7F2E8"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mandeepkhatri.internably",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Internably uses your photo library when you choose a profile or post image."
+      }
     },
     "android": {
+      "package": "com.mandeepkhatri.internably",
+      "versionCode": 1,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F7F2E8"
       }
     },

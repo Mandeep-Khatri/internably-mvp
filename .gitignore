@@ -1,6 +1,8 @@
 node_modules
 .env
 .env.*
+!.env.example
+!**/.env.example
 dist
 build
 coverage
@@ -8,4 +10,6 @@ coverage
 .expo
 .DS_Store
 apps/api/prisma/dev.db
+apps/api/src/**/*.js
+apps/api/prisma/*.js
 apps/mobile/.expo

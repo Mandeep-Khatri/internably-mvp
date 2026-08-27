@@ -28,10 +28,19 @@
     },
     "plugins": [
       "expo-router",
-      "expo-web-browser"
+      "expo-dev-client",
+      [
+        "react-native-nitro-google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.89678193241-dto8ml58fb4e3fgjetoiql4pfmrur3oj"
+        }
+      ]
     ],
     "extra": {
-      "apiUrl": "http://localhost:4000/api"
+      "apiUrl": "https://internablyapi-production.up.railway.app/api",
+      "googleWebClientId": "89678193241-pptijq3n5iom0gh9a8t1h7a3vctoj9t1.apps.googleusercontent.com",
+      "googleIosClientId": "89678193241-dto8ml58fb4e3fgjetoiql4pfmrur3oj.apps.googleusercontent.com",
+      "googleAndroidClientId": "89678193241-57ep39u12q5k038mc5sqdcfgq7f9mttf.apps.googleusercontent.com"
     }
   }
 }

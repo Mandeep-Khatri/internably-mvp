@@ -7,15 +7,13 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "backgroundColor": "#F7F2E8"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mandeepkhatri.internably",
       "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Internably uses your photo library when you choose a profile or post image."
+        "NSPhotoLibraryUsageDescription": "Internably uses your photo library when you choose a profile or post image.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -34,7 +32,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.89678193241-dto8ml58fb4e3fgjetoiql4pfmrur3oj"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "https://internablyapi-production.up.railway.app/api",

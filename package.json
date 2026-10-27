@@ -16,13 +16,14 @@
     "db:seed": "npm run prisma:seed -w apps/api"
   },
   "overrides": {
-    "expo-font": "14.0.12",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "expo-font": "~57.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3"
   },
   "devDependencies": {
-    "expo-font": "14.0.12",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "expo-font": "~57.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   }
 }

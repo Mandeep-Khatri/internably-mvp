@@ -395,11 +395,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     color: '#2E2E2E',
-    fontFamily: 'Inter',
     fontSize: 16,
+    lineHeight: 22,
     fontWeight: '400',
-    paddingTop: 0,
-    paddingBottom: 0,
+    paddingVertical: 8,
     textAlignVertical: 'center',
   },
   logoWrap: {

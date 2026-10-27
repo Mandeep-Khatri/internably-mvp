@@ -14,6 +14,8 @@ export const ResourcesApi = {
   removeConnection: async (userId: string) => (await api.delete(`/connections/${userId}`)).data,
   blockUser: async (userId: string, reason: string) =>
     (await api.post(`/connections/block/${userId}`, { reason })).data,
+  blockedUsers: async () => (await api.get('/connections/blocked')).data,
+  unblockUser: async (userId: string) => (await api.delete(`/connections/block/${userId}`)).data,
   notifications: async () => (await api.get('/notifications')).data,
   conversations: async () => (await api.get('/conversations')).data,
   createConversation: async (peerId: string) => (await api.post('/conversations', { peerId })).data,
@@ -22,6 +24,8 @@ export const ResourcesApi = {
     payload: { content?: string; sharedPostId?: string },
   ) => (await api.post(`/conversations/${conversationId}/messages`, payload)).data,
   usersMe: async () => (await api.get('/users/me')).data,
+  logout: async (refreshToken: string) => (await api.post('/auth/logout', { refreshToken })).data,
+  deleteMe: async () => (await api.delete('/users/me')).data,
   userById: async (id: string) => (await api.get(`/users/${id}`)).data,
   updateMe: async (payload: Record<string, unknown>) => (await api.patch('/users/me', payload)).data,
   usersSearch: async (q: string) => (await api.get('/users/search', { params: { q } })).data,

@@ -34,6 +34,16 @@ export class ConnectionsController {
     return this.connectionsService.block(user.sub, userId, dto.reason);
   }
 
+  @Get('blocked')
+  blocked(@CurrentUser() user: { sub: string }) {
+    return this.connectionsService.blocked(user.sub);
+  }
+
+  @Delete('block/:userId')
+  unblock(@CurrentUser() user: { sub: string }, @Param('userId') userId: string) {
+    return this.connectionsService.unblock(user.sub, userId);
+  }
+
   @Get()
   list(@CurrentUser() user: { sub: string }) {
     return this.connectionsService.list(user.sub);

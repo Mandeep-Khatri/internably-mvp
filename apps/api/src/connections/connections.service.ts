@@ -99,6 +99,36 @@ export class ConnectionsService {
     return { success: true };
   }
 
+  blocked(userId: string) {
+    return this.prisma.block.findMany({
+      where: { blockerId: userId },
+      include: {
+        blocked: {
+          select: {
+            id: true,
+            username: true,
+            profile: {
+              select: {
+                firstName: true,
+                lastName: true,
+                headline: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async unblock(userId: string, targetUserId: string) {
+    await this.prisma.block.deleteMany({
+      where: { blockerId: userId, blockedId: targetUserId },
+    });
+    return { success: true };
+  }
+
   list(userId: string) {
     return this.prisma.connection.findMany({
       where: { OR: [{ userAId: userId }, { userBId: userId }] },

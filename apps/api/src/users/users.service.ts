@@ -82,6 +82,28 @@ export class UsersService {
     return this.me(userId);
   }
 
+  async deleteMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    if (!user) {
+      return { success: true };
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.application.deleteMany({
+        where: {
+          OR: [{ userId }, { email: user.email }],
+        },
+      }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
+
+    return { success: true };
+  }
+
   async search(userId: string, query: Record<string, string | undefined>) {
     const q = query.q?.trim();
     const terms = q ? q.split(/\s+/).filter(Boolean).slice(0, 5) : [];

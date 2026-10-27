@@ -382,9 +382,9 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     flex: 1,
-    height: 44,
+    minHeight: 48,
     borderWidth: 0,
-    borderRadius: 22,
+    borderRadius: 24,
     backgroundColor: '#DCDCDC',
     flexDirection: 'row',
     alignItems: 'center',
@@ -393,12 +393,11 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    height: 44,
+    alignSelf: 'stretch',
     color: '#2E2E2E',
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 17,
     fontWeight: '400',
-    paddingVertical: 8,
+    paddingVertical: 10,
     textAlignVertical: 'center',
   },
   logoWrap: {

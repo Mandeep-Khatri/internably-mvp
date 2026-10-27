@@ -213,7 +213,7 @@ export default function GrowScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search people by name or username"
+            placeholder="Search peer"
             placeholderTextColor="#7A7A7A"
             style={styles.searchInput}
             autoCapitalize="none"
@@ -382,9 +382,9 @@ const styles = StyleSheet.create({
   },
   searchWrap: {
     flex: 1,
-    minHeight: 36,
+    height: 44,
     borderWidth: 0,
-    borderRadius: 18,
+    borderRadius: 22,
     backgroundColor: '#DCDCDC',
     flexDirection: 'row',
     alignItems: 'center',
@@ -393,9 +393,14 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    height: 44,
     color: '#2E2E2E',
-    ...typography.secondary,
-    paddingVertical: 0,
+    fontFamily: 'Inter',
+    fontSize: 16,
+    fontWeight: '400',
+    paddingTop: 0,
+    paddingBottom: 0,
+    textAlignVertical: 'center',
   },
   logoWrap: {
     width: 136,

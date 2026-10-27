@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Keyboard,
@@ -14,7 +15,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Button, Input, PostCard, colors, spacing } from '@internably/ui/src';
+import { Avatar, Button, Input, PostCard, colors, spacing } from '@internably/ui/src';
 import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
@@ -44,6 +45,31 @@ type NotificationItem = {
   isRead?: boolean;
 };
 
+type Peer = {
+  id: string;
+  username?: string | null;
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    headline?: string | null;
+    major?: string | null;
+    avatarUrl?: string | null;
+    school?: { name?: string | null } | null;
+  };
+};
+
+type Connection = {
+  id: string;
+  userAId: string;
+  userBId: string;
+};
+
+type ConnectionRequest = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+};
+
 function formatTime(ts?: string) {
   if (!ts) return 'now';
   const date = new Date(ts);
@@ -68,13 +94,36 @@ function postSubtitle(post: FeedPost) {
   return post.author?.profile?.headline ?? `${post.author?.profile?.school?.name ?? 'Student'} Network`;
 }
 
+function peerName(peer: Peer) {
+  const first = peer.profile?.firstName?.trim() ?? '';
+  const last = peer.profile?.lastName?.trim() ?? '';
+  return `${first} ${last}`.trim() || 'Internably Member';
+}
+
+function peerMeta(peer: Peer) {
+  const username = peer.username ? `@${peer.username}` : '';
+  const detail =
+    peer.profile?.headline ??
+    [peer.profile?.major, peer.profile?.school?.name].filter(Boolean).join(' · ') ??
+    'Student member';
+  return [username, detail || 'Student member'].filter(Boolean).join(' · ');
+}
+
 export default function FeedScreen() {
   const [composerVisible, setComposerVisible] = useState(false);
   const [postToShare, setPostToShare] = useState<FeedPost | null>(null);
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const queryClient = useQueryClient();
   const topBarHeight = 76;
+  const trimmedSearch = search.trim();
+  const searching = trimmedSearch.length > 0;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(trimmedSearch), 300);
+    return () => clearTimeout(timer);
+  }, [trimmedSearch]);
 
   const feedQuery = useQuery<FeedPost[]>({
     queryKey: ['feed'],
@@ -83,6 +132,32 @@ export default function FeedScreen() {
   const notificationsQuery = useQuery<NotificationItem[]>({
     queryKey: ['notifications'],
     queryFn: ResourcesApi.notifications,
+  });
+  const peerSearchQuery = useQuery<Peer[]>({
+    queryKey: ['users-search', debouncedSearch],
+    queryFn: () => ResourcesApi.usersSearch(debouncedSearch),
+    enabled: debouncedSearch.length >= 2,
+    staleTime: 30_000,
+  });
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
+    enabled: searching,
+  });
+  const connectionsQuery = useQuery<Connection[]>({
+    queryKey: ['connections'],
+    queryFn: ResourcesApi.connections,
+    enabled: searching,
+  });
+  const outgoingQuery = useQuery<ConnectionRequest[]>({
+    queryKey: ['connection-requests', 'outgoing'],
+    queryFn: ResourcesApi.outgoingConnectionRequests,
+    enabled: searching,
+  });
+  const incomingQuery = useQuery<ConnectionRequest[]>({
+    queryKey: ['connection-requests', 'incoming'],
+    queryFn: ResourcesApi.incomingConnectionRequests,
+    enabled: searching,
   });
 
   const createPostMutation = useMutation({
@@ -131,15 +206,59 @@ export default function FeedScreen() {
     },
   });
 
+  const connectMutation = useMutation({
+    mutationFn: ResourcesApi.requestConnection,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connection-requests', 'outgoing'] }),
+        queryClient.invalidateQueries({ queryKey: ['users-search'] }),
+      ]);
+    },
+    onError: () => {
+      Alert.alert('Unable to connect', 'Please check your network and try again.');
+    },
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: ResourcesApi.acceptConnectionRequest,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['connection-requests', 'incoming'] }),
+        queryClient.invalidateQueries({ queryKey: ['connections'] }),
+        queryClient.invalidateQueries({ queryKey: ['users-search'] }),
+      ]);
+    },
+    onError: () => {
+      Alert.alert('Unable to accept', 'Please check your network and try again.');
+    },
+  });
+
   const feed = feedQuery.data ?? [];
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return feed;
-    return feed.filter((p) => {
-      const hay = `${postAuthorName(p)} ${postSubtitle(p) ?? ''} ${p.content ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [feed, search]);
+  const outgoingUserIds = useMemo(
+    () => new Set((outgoingQuery.data ?? []).map((request) => request.toUserId)),
+    [outgoingQuery.data],
+  );
+  const incomingByUserId = useMemo(
+    () =>
+      new Map<string, ConnectionRequest>(
+        (incomingQuery.data ?? []).map((request) => [request.fromUserId, request] as const),
+      ),
+    [incomingQuery.data],
+  );
+  const connectedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const meId = meQuery.data?.id;
+    if (!meId) return ids;
+    for (const connection of connectionsQuery.data ?? []) {
+      if (connection.userAId === meId) ids.add(connection.userBId);
+      if (connection.userBId === meId) ids.add(connection.userAId);
+    }
+    return ids;
+  }, [connectionsQuery.data, meQuery.data?.id]);
+  const searchMatchesCurrent = trimmedSearch.length >= 2 && debouncedSearch === trimmedSearch;
+  const peerResults = searchMatchesCurrent ? peerSearchQuery.data ?? [] : [];
+  const peerSearchPending =
+    trimmedSearch.length >= 2 && (!searchMatchesCurrent || peerSearchQuery.isFetching);
   const unreadCount = useMemo(
     () => (notificationsQuery.data ?? []).filter((item) => !item.isRead).length,
     [notificationsQuery.data],
@@ -155,41 +274,125 @@ export default function FeedScreen() {
         notificationCount={unreadCount}
       />
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingTop: topBarHeight + spacing.md }]}
-        refreshControl={<RefreshControl refreshing={feedQuery.isRefetching} onRefresh={feedQuery.refetch} tintColor={colors.primary} />}
-        renderItem={({ item }) => (
-          <PostCard
-            authorName={postAuthorName(item)}
-            subtitle={postSubtitle(item)}
-            timestamp={formatTime(item.createdAt)}
-            avatarUrl={item.author?.profile?.avatarUrl ?? null}
-            content={item.content}
-            imageUrl={item.imageUrl ?? null}
-            likes={item._count?.likes ?? 0}
-            comments={item._count?.comments ?? 0}
-            liked={Boolean(item.likedByMe)}
-            likeDisabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.id === item.id}
-            onLike={() => toggleLikeMutation.mutate(item)}
-            onComment={() => router.push(`/posts/${item.id}`)}
-            onShare={() => setPostToShare(item)}
-            onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
-            onPressPost={() => router.push(`/posts/${item.id}`)}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Text style={styles.emptyTitle}>No posts yet</Text>
-            <Text style={styles.emptyBody}>Create the first thought in your network.</Text>
-          </View>
-        }
-      />
+      {searching ? (
+        <FlatList
+          data={peerResults}
+          key="peer-results"
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.peerListContent, { paddingTop: topBarHeight + spacing.md }]}
+          renderItem={({ item }) => {
+            const connected = connectedUserIds.has(item.id);
+            const requested = outgoingUserIds.has(item.id);
+            const incomingRequest = incomingByUserId.get(item.id);
+            const sending = connectMutation.isPending && connectMutation.variables === item.id;
+            const accepting =
+              acceptMutation.isPending && acceptMutation.variables === incomingRequest?.id;
+            const label = connected
+              ? 'Connected'
+              : requested
+                ? 'Requested'
+                : accepting
+                  ? 'Accepting…'
+                  : incomingRequest
+                    ? 'Accept'
+                    : sending
+                      ? 'Sending…'
+                      : 'Connect';
+            const disabled = connected || requested || sending || accepting;
 
-      <Pressable onPress={() => setComposerVisible(true)} style={styles.fab}>
-        <Text style={styles.fabText}>+</Text>
-      </Pressable>
+            return (
+              <View style={styles.peerRow}>
+                <Pressable
+                  style={styles.peerIdentity}
+                  onPress={() => router.push(`/profile/${item.id}`)}
+                >
+                  <Avatar name={peerName(item)} uri={item.profile?.avatarUrl} size={52} />
+                  <View style={styles.peerCopy}>
+                    <Text numberOfLines={1} style={styles.peerName}>{peerName(item)}</Text>
+                    <Text numberOfLines={2} style={styles.peerMeta}>{peerMeta(item)}</Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  disabled={disabled}
+                  onPress={() => {
+                    if (incomingRequest) {
+                      acceptMutation.mutate(incomingRequest.id);
+                      return;
+                    }
+                    connectMutation.mutate(item.id);
+                  }}
+                  style={[
+                    styles.peerButton,
+                    (connected || requested) && styles.peerButtonSuccess,
+                    disabled && styles.peerButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.peerButtonText,
+                      (connected || requested) && styles.peerButtonTextSuccess,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          }}
+          ListHeaderComponent={<Text style={styles.peerListTitle}>Search peers</Text>}
+          ListEmptyComponent={
+            trimmedSearch.length < 2 ? (
+              <Text style={styles.peerEmpty}>Type at least 2 characters to search.</Text>
+            ) : peerSearchPending ? (
+              <ActivityIndicator color={colors.primary} style={styles.peerLoading} />
+            ) : peerSearchQuery.isError ? (
+              <Text style={styles.peerEmpty}>Unable to search peers. Please try again.</Text>
+            ) : (
+              <Text style={styles.peerEmpty}>No matching peers found.</Text>
+            )
+          }
+        />
+      ) : (
+        <FlatList
+          data={feed}
+          key="feed"
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingTop: topBarHeight + spacing.md }]}
+          refreshControl={<RefreshControl refreshing={feedQuery.isRefetching} onRefresh={feedQuery.refetch} tintColor={colors.primary} />}
+          renderItem={({ item }) => (
+            <PostCard
+              authorName={postAuthorName(item)}
+              subtitle={postSubtitle(item)}
+              timestamp={formatTime(item.createdAt)}
+              avatarUrl={item.author?.profile?.avatarUrl ?? null}
+              content={item.content}
+              imageUrl={item.imageUrl ?? null}
+              likes={item._count?.likes ?? 0}
+              comments={item._count?.comments ?? 0}
+              liked={Boolean(item.likedByMe)}
+              likeDisabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.id === item.id}
+              onLike={() => toggleLikeMutation.mutate(item)}
+              onComment={() => router.push(`/posts/${item.id}`)}
+              onShare={() => setPostToShare(item)}
+              onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
+              onPressPost={() => router.push(`/posts/${item.id}`)}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTitle}>No posts yet</Text>
+              <Text style={styles.emptyBody}>Create the first thought in your network.</Text>
+            </View>
+          }
+        />
+      )}
+
+      {!searching && (
+        <Pressable onPress={() => setComposerVisible(true)} style={styles.fab}>
+          <Text style={styles.fabText}>+</Text>
+        </Pressable>
+      )}
 
       <Modal animationType="slide" transparent visible={composerVisible} onRequestClose={() => setComposerVisible(false)}>
         <KeyboardAvoidingView
@@ -249,6 +452,82 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 6,
     fontSize: 15,
+  },
+  peerListContent: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: 120,
+  },
+  peerListTitle: {
+    color: colors.text,
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  peerRow: {
+    minHeight: 78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E6E0D5',
+  },
+  peerIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  peerCopy: {
+    flex: 1,
+  },
+  peerName: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  peerMeta: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 19,
+    marginTop: 2,
+  },
+  peerButton: {
+    minWidth: 86,
+    minHeight: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: '#2B7BC6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  peerButtonSuccess: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  peerButtonDisabled: {
+    opacity: 0.72,
+  },
+  peerButtonText: {
+    color: '#2B7BC6',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  peerButtonTextSuccess: {
+    color: '#FFFFFF',
+  },
+  peerEmpty: {
+    color: colors.muted,
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: 'center',
+    paddingTop: 36,
+  },
+  peerLoading: {
+    marginTop: 36,
   },
   fab: {
     position: 'absolute',

@@ -17,6 +17,10 @@ export const ResourcesApi = {
   notifications: async () => (await api.get('/notifications')).data,
   conversations: async () => (await api.get('/conversations')).data,
   createConversation: async (peerId: string) => (await api.post('/conversations', { peerId })).data,
+  sendMessage: async (
+    conversationId: string,
+    payload: { content?: string; sharedPostId?: string },
+  ) => (await api.post(`/conversations/${conversationId}/messages`, payload)).data,
   usersMe: async () => (await api.get('/users/me')).data,
   userById: async (id: string) => (await api.get(`/users/${id}`)).data,
   updateMe: async (payload: Record<string, unknown>) => (await api.patch('/users/me', payload)).data,

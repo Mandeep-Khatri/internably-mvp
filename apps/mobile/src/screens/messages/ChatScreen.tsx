@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, colors, spacing } from '@internably/ui/src';
 import { api } from '@/api/client';
 import ScreenContainer from '../shared/ScreenContainer';
 
 type ChatMessage = {
   id: string;
+  type?: 'TEXT' | 'POST_SHARE';
   content: string;
   createdAt?: string;
   sender?: {
@@ -16,12 +17,29 @@ type ChatMessage = {
       lastName?: string | null;
     };
   };
+  sharedPost?: {
+    id: string;
+    content: string;
+    imageUrl?: string | null;
+    author?: {
+      profile?: {
+        firstName?: string | null;
+        lastName?: string | null;
+      } | null;
+    } | null;
+  } | null;
 };
 
 function senderName(message: ChatMessage) {
   const first = message.sender?.profile?.firstName?.trim() ?? '';
   const last = message.sender?.profile?.lastName?.trim() ?? '';
   return `${first} ${last}`.trim() || 'Member';
+}
+
+function postAuthorName(message: ChatMessage) {
+  const first = message.sharedPost?.author?.profile?.firstName?.trim() ?? '';
+  const last = message.sharedPost?.author?.profile?.lastName?.trim() ?? '';
+  return `${first} ${last}`.trim() || 'Internably Member';
 }
 
 export default function ChatScreen() {
@@ -50,8 +68,13 @@ export default function ChatScreen() {
   return (
     <ScreenContainer noPadding>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>{'<'}</Text>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={12}
+        >
+          <Text style={styles.back}>Back</Text>
         </Pressable>
         <Text style={styles.headerTitle}>Conversation</Text>
       </View>
@@ -60,12 +83,46 @@ export default function ChatScreen() {
         data={reversed}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.messageCard}>
-            <Text style={styles.sender}>{senderName(item)}</Text>
-            <Text style={styles.body}>{item.content}</Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const sharedPost = item.sharedPost;
+          return (
+            <View style={styles.messageCard}>
+              <Text style={styles.sender}>{senderName(item)}</Text>
+              {item.type === 'POST_SHARE' ? (
+                sharedPost ? (
+                  <Pressable
+                    style={styles.sharedPost}
+                    onPress={() => router.push(`/posts/${sharedPost.id}`)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open shared post"
+                  >
+                    {!!sharedPost.imageUrl && (
+                      <Image
+                        source={{ uri: sharedPost.imageUrl }}
+                        style={styles.sharedPostImage}
+                      />
+                    )}
+                    <Text style={styles.sharedPostLabel}>Shared post</Text>
+                    <Text style={styles.sharedPostAuthor}>{postAuthorName(item)}</Text>
+                    <Text numberOfLines={3} style={styles.sharedPostContent}>
+                      {sharedPost.content}
+                    </Text>
+                    <Text style={styles.openPost}>Open post</Text>
+                  </Pressable>
+                ) : (
+                  <View style={styles.unavailablePost}>
+                    <Text style={styles.unavailableTitle}>Post unavailable</Text>
+                    <Text style={styles.unavailableBody}>
+                      This post may have been deleted.
+                    </Text>
+                  </View>
+                )
+              ) : (
+                <Text style={styles.body}>{item.content}</Text>
+              )}
+            </View>
+          );
+        }}
       />
 
       <View style={styles.composer}>
@@ -104,10 +161,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   back: {
-    color: '#111111',
-    fontSize: 42,
-    lineHeight: 46,
-    fontWeight: '500',
+    color: colors.primary,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   headerTitle: {
     color: colors.text,
@@ -136,6 +193,67 @@ const styles = StyleSheet.create({
     color: '#222222',
     fontSize: 15,
     lineHeight: 21,
+  },
+  sharedPost: {
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#D9D2C5',
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.sm,
+  },
+  sharedPostImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 9,
+    marginBottom: spacing.sm,
+    backgroundColor: '#E8E2D7',
+  },
+  sharedPostLabel: {
+    color: colors.primary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  sharedPostAuthor: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  sharedPostContent: {
+    color: '#393631',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  openPost: {
+    color: colors.primary,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+    marginTop: spacing.sm,
+  },
+  unavailablePost: {
+    borderWidth: 1,
+    borderColor: '#D9D2C5',
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  unavailableTitle: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  unavailableBody: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
   composer: {
     position: 'absolute',

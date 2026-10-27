@@ -35,6 +35,11 @@ enum NotificationType {
   ADMIN_UPDATE
 }
 
+enum MessageType {
+  TEXT
+  POST_SHARE
+}
+
 enum GroupType {
   SCHOOL
   CITY
@@ -227,8 +232,9 @@ model Post {
 
   author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   group       Group?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  comments    Comment[]
-  likes       Like[]
+  comments       Comment[]
+  likes          Like[]
+  sharedMessages Message[]
 
   @@index([authorId, createdAt])
   @@index([groupId, createdAt])
@@ -319,12 +325,17 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String
   senderId       String
+  type           MessageType  @default(TEXT)
   content        String
+  sharedPostId   String?
   createdAt      DateTime     @default(now())
   readAt         DateTime?
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sharedPost     Post?        @relation(fields: [sharedPostId], references: [id], onDelete: SetNull)
+
+  @@index([sharedPostId])
 }
 
 model Notification {

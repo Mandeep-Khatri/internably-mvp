@@ -10,7 +10,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -20,6 +19,7 @@ import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 import FeedTopBar from '../shared/FeedTopBar';
+import SharePostModal from '../shared/SharePostModal';
 
 type FeedPost = {
   id: string;
@@ -70,6 +70,7 @@ function postSubtitle(post: FeedPost) {
 
 export default function FeedScreen() {
   const [composerVisible, setComposerVisible] = useState(false);
+  const [postToShare, setPostToShare] = useState<FeedPost | null>(null);
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
@@ -173,7 +174,7 @@ export default function FeedScreen() {
             likeDisabled={toggleLikeMutation.isPending && toggleLikeMutation.variables?.id === item.id}
             onLike={() => toggleLikeMutation.mutate(item)}
             onComment={() => router.push(`/posts/${item.id}`)}
-            onShare={() => Share.share({ message: `${postAuthorName(item)} on Internably:\n\n${item.content}` })}
+            onShare={() => setPostToShare(item)}
             onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
             onPressPost={() => router.push(`/posts/${item.id}`)}
           />
@@ -219,6 +220,12 @@ export default function FeedScreen() {
           </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      <SharePostModal
+        visible={Boolean(postToShare)}
+        post={postToShare}
+        onClose={() => setPostToShare(null)}
+      />
     </ScreenContainer>
   );
 }

@@ -31,16 +31,20 @@ function formatDate(ts?: string) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-function conversationName(c: Conversation) {
-  const member = c.members?.[0]?.user?.profile;
+function conversationPeer(c: Conversation, meId?: string) {
+  return c.members?.find((member) => member.user?.id !== meId)?.user ?? c.members?.[0]?.user;
+}
+
+function conversationName(c: Conversation, meId?: string) {
+  const member = conversationPeer(c, meId)?.profile;
   const first = member?.firstName?.trim() ?? '';
   const last = member?.lastName?.trim() ?? '';
   const full = `${first} ${last}`.trim();
   return full || `Conversation ${c.id.slice(0, 6)}`;
 }
 
-function conversationAvatar(c: Conversation) {
-  return c.members?.[0]?.user?.profile?.avatarUrl ?? null;
+function conversationAvatar(c: Conversation, meId?: string) {
+  return conversationPeer(c, meId)?.profile?.avatarUrl ?? null;
 }
 
 export default function MessagesScreen() {
@@ -49,16 +53,21 @@ export default function MessagesScreen() {
     queryKey: ['conversations'],
     queryFn: ResourcesApi.conversations,
   });
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
+  });
+  const meId = meQuery.data?.id;
 
   const conversations = listQuery.data ?? [];
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return conversations;
     return conversations.filter((item) => {
-      const target = `${conversationName(item)} ${item.messages?.[0]?.content ?? ''}`.toLowerCase();
+      const target = `${conversationName(item, meId)} ${item.messages?.[0]?.content ?? ''}`.toLowerCase();
       return target.includes(q);
     });
-  }, [conversations, query]);
+  }, [conversations, meId, query]);
 
   return (
     <ScreenContainer noPadding scroll={false}>
@@ -91,9 +100,16 @@ export default function MessagesScreen() {
           const lastMessage = item.messages?.[0]?.content ?? 'Start a conversation';
           return (
             <Pressable onPress={() => router.push(`/messages/${item.id}`)} style={styles.row}>
-              <Avatar name={conversationName(item)} uri={conversationAvatar(item)} size={54} online />
+              <Avatar
+                name={conversationName(item, meId)}
+                uri={conversationAvatar(item, meId)}
+                size={54}
+                online
+              />
               <View style={styles.mainCol}>
-                <Text numberOfLines={1} style={styles.name}>{conversationName(item)}</Text>
+                <Text numberOfLines={1} style={styles.name}>
+                  {conversationName(item, meId)}
+                </Text>
                 <Text numberOfLines={1} style={styles.message}>{lastMessage}</Text>
               </View>
               <Text style={styles.date}>{formatDate(item.updatedAt ?? item.messages?.[0]?.createdAt)}</Text>

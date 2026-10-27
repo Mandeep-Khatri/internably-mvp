@@ -84,8 +84,13 @@ export default function SignUpScreen() {
   return (
     <ScreenContainer>
       <View style={styles.topRow}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>{'<'}</Text>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={12}
+        >
+          <Text style={styles.back}>Back</Text>
         </Pressable>
       </View>
 
@@ -135,10 +140,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   back: {
-    color: colors.text,
-    fontSize: 46,
-    lineHeight: 50,
-    fontWeight: '500',
+    color: colors.primary,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   topHeader: {
     marginTop: spacing.xs,

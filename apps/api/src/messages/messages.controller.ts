@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CreateConversationDto, SendMessageDto } from './dto/messages.dto';
 import { MessagesGateway } from './messages.gateway';
 import { MessagesService } from './messages.service';
 
@@ -18,8 +19,11 @@ export class MessagesController {
   }
 
   @Post('conversations')
-  createConversation(@CurrentUser() user: { sub: string }, @Body() body: { peerId: string }) {
-    return this.messagesService.createConversation(user.sub, body.peerId);
+  createConversation(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreateConversationDto,
+  ) {
+    return this.messagesService.createConversation(user.sub, dto.peerId);
   }
 
   @Get('conversations/:id/messages')
@@ -31,9 +35,9 @@ export class MessagesController {
   async sendMessage(
     @CurrentUser() user: { sub: string },
     @Param('id') id: string,
-    @Body() body: { content: string },
+    @Body() dto: SendMessageDto,
   ) {
-    const message = await this.messagesService.sendMessage(user.sub, id, body.content);
+    const message = await this.messagesService.sendMessage(user.sub, id, dto);
     this.messagesGateway.emitMessage(id, message);
     return message;
   }

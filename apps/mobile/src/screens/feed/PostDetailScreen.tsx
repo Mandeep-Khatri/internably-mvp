@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Alert, FlatList, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Input, PostCard, colors, spacing, typography } from '@internably/ui/src';
 import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
+import SharePostModal from '../shared/SharePostModal';
 
 type PostDetail = {
   id: string;
@@ -42,6 +43,7 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const postId = String(id);
   const [comment, setComment] = useState('');
+  const [shareVisible, setShareVisible] = useState(false);
   const commentInputRef = useRef<TextInput>(null);
   const queryClient = useQueryClient();
 
@@ -137,7 +139,7 @@ export default function PostDetailScreen() {
                 likeDisabled={likeMutation.isPending}
                 onLike={() => likeMutation.mutate()}
                 onComment={() => commentInputRef.current?.focus()}
-                onShare={() => Share.share({ message: `${postAuthorName(post)} on Internably:\n\n${post.content}` })}
+                onShare={() => setShareVisible(true)}
               />
             )}
             <Text style={styles.commentsTitle}>Comments</Text>
@@ -164,6 +166,12 @@ export default function PostDetailScreen() {
         ListEmptyComponent={
           commentsQuery.isLoading ? <Text style={styles.loading}>Loading comments…</Text> : <Text style={styles.loading}>No comments yet.</Text>
         }
+      />
+
+      <SharePostModal
+        visible={shareVisible}
+        post={post ?? null}
+        onClose={() => setShareVisible(false)}
       />
     </ScreenContainer>
   );

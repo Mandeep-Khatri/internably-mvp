@@ -200,17 +200,6 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer>
-      <View style={styles.topRow}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-        >
-          <Text style={styles.back}>Back</Text>
-        </Pressable>
-      </View>
-
       <View style={styles.brandWrap}>
         <InternablyLogo compact />
       </View>
@@ -304,16 +293,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  topRow: {
-    minHeight: 42,
-    justifyContent: 'center',
-  },
-  back: {
-    color: colors.primary,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '700',
-  },
   brandWrap: {
     alignItems: 'center',
     marginBottom: spacing.md,

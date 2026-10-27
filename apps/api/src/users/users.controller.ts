@@ -20,8 +20,11 @@ export class UsersController {
   }
 
   @Get('search')
-  search(@Query() query: Record<string, string | undefined>) {
-    return this.usersService.search(query);
+  search(
+    @CurrentUser() user: { sub: string },
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.usersService.search(user.sub, query);
   }
 
   @Get('suggestions')

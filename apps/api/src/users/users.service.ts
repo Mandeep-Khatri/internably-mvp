@@ -82,31 +82,46 @@ export class UsersService {
     return this.me(userId);
   }
 
-  async search(query: Record<string, string | undefined>) {
+  async search(userId: string, query: Record<string, string | undefined>) {
     const q = query.q?.trim();
+    const terms = q ? q.split(/\s+/).filter(Boolean).slice(0, 5) : [];
+    const termFilters: Prisma.UserWhereInput[] = terms.map((term) => ({
+      OR: [
+        { username: { contains: term, mode: 'insensitive' } },
+        { profile: { is: { firstName: { contains: term, mode: 'insensitive' } } } },
+        { profile: { is: { lastName: { contains: term, mode: 'insensitive' } } } },
+        { profile: { is: { headline: { contains: term, mode: 'insensitive' } } } },
+        { profile: { is: { major: { contains: term, mode: 'insensitive' } } } },
+        { profile: { is: { school: { is: { name: { contains: term, mode: 'insensitive' } } } } } },
+      ],
+    }));
+
     const where: Prisma.UserWhereInput = {
+      id: { not: userId },
       isApproved: true,
+      isVerified: true,
+      blocksInitiated: { none: { blockedId: userId } },
+      blocksReceived: { none: { blockerId: userId } },
       profile: {
         is: {
           major: query.major,
           city: query.city,
           graduationYear: query.graduationYear ? Number(query.graduationYear) : undefined,
           openToInternship: query.openToInternship === 'true' ? true : undefined,
-          openToNetwork: query.openToNetwork === 'true' ? true : undefined,
-          OR: q
-            ? [
-                { firstName: { contains: q, mode: 'insensitive' } },
-                { lastName: { contains: q, mode: 'insensitive' } },
-                { headline: { contains: q, mode: 'insensitive' } },
-              ]
-            : undefined,
+          openToNetwork: true,
         },
       },
+      AND: termFilters.length ? termFilters : undefined,
     };
 
     return this.prisma.user.findMany({
       where,
-      include: { profile: { include: { school: true, company: true } } },
+      select: {
+        id: true,
+        username: true,
+        profile: { include: { school: true, company: true } },
+      },
+      orderBy: { createdAt: 'desc' },
       take: 50,
     });
   }

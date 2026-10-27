@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Avatar, ConnectionCard, colors, spacing, typography } from '@internably/ui/src';
@@ -9,6 +9,7 @@ import ScreenContainer from '../shared/ScreenContainer';
 
 type SuggestedUser = {
   id: string;
+  username?: string | null;
   profile?: {
     firstName?: string | null;
     lastName?: string | null;
@@ -25,6 +26,12 @@ type Group = {
   type?: string;
   description?: string;
   _count?: { members?: number };
+};
+
+type Connection = {
+  id: string;
+  userAId: string;
+  userBId: string;
 };
 
 type ConnectionRequest = {
@@ -51,11 +58,36 @@ function userHeadline(user: SuggestedUser) {
 export default function GrowScreen() {
   const [tab, setTab] = useState<'grow' | 'catchup'>('grow');
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const qc = useQueryClient();
+  const trimmedQuery = query.trim();
+  const searching = trimmedQuery.length > 0;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(trimmedQuery), 300);
+    return () => clearTimeout(timer);
+  }, [trimmedQuery]);
+
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
+  });
 
   const suggestionsQuery = useQuery<SuggestedUser[]>({
     queryKey: ['suggestions'],
     queryFn: ResourcesApi.usersSuggestions,
+  });
+
+  const searchQuery = useQuery<SuggestedUser[]>({
+    queryKey: ['users-search', debouncedQuery],
+    queryFn: () => ResourcesApi.usersSearch(debouncedQuery),
+    enabled: tab === 'grow' && debouncedQuery.length >= 2,
+    staleTime: 30_000,
+  });
+
+  const connectionsQuery = useQuery<Connection[]>({
+    queryKey: ['connections'],
+    queryFn: ResourcesApi.connections,
   });
 
   const groupsQuery = useQuery<Group[]>({
@@ -78,7 +110,9 @@ export default function GrowScreen() {
     onMutate: async (userId) => {
       await qc.cancelQueries({ queryKey: ['connection-requests', 'outgoing'] });
       const previous = qc.getQueryData<ConnectionRequest[]>(['connection-requests', 'outgoing']);
-      const toUser = suggestionsQuery.data?.find((user) => user.id === userId);
+      const toUser =
+        searchQuery.data?.find((user) => user.id === userId) ??
+        suggestionsQuery.data?.find((user) => user.id === userId);
       qc.setQueryData<ConnectionRequest[]>(['connection-requests', 'outgoing'], (current = []) => [
         ...current,
         {
@@ -97,6 +131,7 @@ export default function GrowScreen() {
     onSettled: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['suggestions'] }),
+        qc.invalidateQueries({ queryKey: ['users-search'] }),
         qc.invalidateQueries({ queryKey: ['connection-requests', 'outgoing'] }),
       ]);
     },
@@ -124,12 +159,30 @@ export default function GrowScreen() {
         qc.invalidateQueries({ queryKey: ['connection-requests', 'incoming'] }),
         qc.invalidateQueries({ queryKey: ['connections'] }),
         qc.invalidateQueries({ queryKey: ['suggestions'] }),
+        qc.invalidateQueries({ queryKey: ['users-search'] }),
       ]);
     },
   });
 
   const outgoing = outgoingQuery.data ?? [];
+  const incoming = incomingQuery.data ?? [];
   const outgoingUserIds = useMemo(() => new Set(outgoing.map((request) => request.toUserId)), [outgoing]);
+  const incomingByUserId = useMemo(
+    () => new Map<string, ConnectionRequest>(
+      incoming.map((request) => [request.fromUserId, request] as const),
+    ),
+    [incoming],
+  );
+  const connectedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const meId = meQuery.data?.id;
+    if (!meId) return ids;
+    for (const connection of connectionsQuery.data ?? []) {
+      if (connection.userAId === meId) ids.add(connection.userBId);
+      if (connection.userBId === meId) ids.add(connection.userAId);
+    }
+    return ids;
+  }, [connectionsQuery.data, meQuery.data?.id]);
   const suggestions = useMemo(() => {
     const users = [...(suggestionsQuery.data ?? [])];
     const ids = new Set(users.map((user) => user.id));
@@ -141,11 +194,16 @@ export default function GrowScreen() {
     }
     return users;
   }, [suggestionsQuery.data, outgoing]);
-  const filteredSuggestions = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return suggestions;
-    return suggestions.filter((u) => `${userName(u)} ${userHeadline(u)}`.toLowerCase().includes(q));
-  }, [suggestions, query]);
+  const searchMatchesCurrent = trimmedQuery.length >= 2 && debouncedQuery === trimmedQuery;
+  const visibleUsers = searching
+    ? searchMatchesCurrent
+      ? searchQuery.data ?? []
+      : []
+    : suggestions;
+  const searchPending =
+    searching &&
+    trimmedQuery.length >= 2 &&
+    (!searchMatchesCurrent || searchQuery.isFetching);
 
   return (
     <ScreenContainer noPadding scroll={false}>
@@ -155,7 +213,7 @@ export default function GrowScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search"
+            placeholder="Search people by name or username"
             placeholderTextColor="#7A7A7A"
             style={styles.searchInput}
             autoCapitalize="none"
@@ -182,33 +240,74 @@ export default function GrowScreen() {
       {tab === 'grow' ? (
         <FlatList
           key="grow-list"
-          data={filteredSuggestions}
+          data={visibleUsers}
           numColumns={2}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.gridContent}
           columnWrapperStyle={styles.column}
-          renderItem={({ item }) => (
-            <View style={styles.cardCol}>
-              {(() => {
-                const requested = outgoingUserIds.has(item.id);
-                return (
-                  <ConnectionCard
-                    name={userName(item)}
-                    headline={userHeadline(item)}
-                    mutualText="Mutual peers in your network"
-                    avatarUrl={item.profile?.avatarUrl ?? null}
-                    onConnect={() => !requested && connectMutation.mutate(item.id)}
-                    connectLabel={requested ? 'Requested' : 'Connect'}
-                    connectDisabled={requested}
-                    connectVariant={requested ? 'success' : 'default'}
-                    onPress={() => router.push(`/profile/${item.id}`)}
-                  />
-                );
-              })()}
-            </View>
-          )}
+          renderItem={({ item }) => {
+            const connected = connectedUserIds.has(item.id);
+            const requested = outgoingUserIds.has(item.id);
+            const incomingRequest = incomingByUserId.get(item.id);
+            const sending = connectMutation.isPending && connectMutation.variables === item.id;
+            const accepting =
+              respondMutation.isPending && respondMutation.variables?.requestId === incomingRequest?.id;
+            const connectLabel = connected
+              ? 'Connected'
+              : requested
+                ? 'Requested'
+                : accepting
+                  ? 'Accepting…'
+                  : incomingRequest
+                    ? 'Accept'
+                    : sending
+                      ? 'Sending…'
+                      : 'Connect';
+
+            return (
+              <View style={styles.cardCol}>
+                <ConnectionCard
+                  name={userName(item)}
+                  headline={userHeadline(item)}
+                  mutualText={searching && item.username ? `@${item.username}` : 'Student member'}
+                  avatarUrl={item.profile?.avatarUrl ?? null}
+                  onConnect={() => {
+                    if (connected || requested || sending || accepting) return;
+                    if (incomingRequest) {
+                      respondMutation.mutate({ requestId: incomingRequest.id, action: 'accept' });
+                      return;
+                    }
+                    connectMutation.mutate(item.id);
+                  }}
+                  connectLabel={connectLabel}
+                  connectDisabled={connected || requested || sending || accepting}
+                  connectVariant={connected || requested ? 'success' : 'default'}
+                  onPress={() => router.push(`/profile/${item.id}`)}
+                />
+              </View>
+            );
+          }}
           ListHeaderComponent={
-            <Text style={styles.sectionTitle}>People you may know from your student network</Text>
+            <Text style={styles.sectionTitle}>
+              {searching ? 'Search results' : 'People you may know from your student network'}
+            </Text>
+          }
+          ListEmptyComponent={
+            searching ? (
+              trimmedQuery.length < 2 ? (
+                <Text style={styles.emptyText}>Type at least 2 characters to search for a member.</Text>
+              ) : searchPending ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : searchQuery.isError ? (
+                <Text style={styles.emptyText}>Unable to search members. Please try again.</Text>
+              ) : (
+                <Text style={styles.emptyText}>No members found with that name or username.</Text>
+              )
+            ) : suggestionsQuery.isLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={styles.emptyText}>No new people to suggest right now.</Text>
+            )
           }
         />
       ) : (

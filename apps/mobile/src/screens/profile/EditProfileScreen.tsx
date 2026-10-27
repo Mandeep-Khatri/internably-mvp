@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, Text } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { Button, Input, colors, spacing } from '@internably/ui/src';
 import { api } from '@/api/client';
 import ScreenContainer from '../shared/ScreenContainer';
@@ -22,7 +21,11 @@ type ProfileState = {
 
 export default function EditProfileScreen() {
   const queryClient = useQueryClient();
-  const meQuery = useQuery({ queryKey: ['me'], queryFn: async () => (await api.get('/users/me')).data });
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get('/users/me')).data,
+    refetchOnMount: 'always',
+  });
 
   const [form, setForm] = useState<ProfileState>({
     firstName: '',
@@ -70,12 +73,6 @@ export default function EditProfileScreen() {
       portfolioUrl: profile.linkedinUrl ?? '',
     });
   }, [meQuery.data]);
-
-  useFocusEffect(
-    useCallback(() => {
-      meQuery.refetch();
-    }, [meQuery]),
-  );
 
   const mutation = useMutation({
     mutationFn: async () =>

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateMeDto } from './dto/users.dto';
 
@@ -98,6 +98,7 @@ export class UsersService {
 
     const where: Prisma.UserWhereInput = {
       id: { not: userId },
+      role: Role.USER,
       isApproved: true,
       isVerified: true,
       blocksInitiated: { none: { blockedId: userId } },
@@ -159,6 +160,7 @@ export class UsersService {
     const overlapCandidates = await this.prisma.user.findMany({
       where: {
         id: { notIn: [...excludedUserIds] },
+        role: Role.USER,
         isApproved: true,
         isVerified: true,
         profile: { is: { openToNetwork: true } },
@@ -194,6 +196,7 @@ export class UsersService {
       const fallback = await this.prisma.user.findMany({
         where: {
           id: { notIn: [...new Set([...excludedUserIds, ...suggestions.map((u) => u.id)])] },
+          role: Role.USER,
           isApproved: true,
           isVerified: true,
           profile: { is: { openToNetwork: true } },

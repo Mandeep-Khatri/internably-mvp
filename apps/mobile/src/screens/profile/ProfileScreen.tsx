@@ -8,7 +8,8 @@ import { colors, spacing, typography } from '@internably/ui/src';
 import { ResourcesApi } from '@/api/resources';
 import { useAuthStore } from '@/store/auth-store';
 import ScreenContainer from '../shared/ScreenContainer';
-
+import { File } from 'expo-file-system';
+import { fetch } from 'expo/fetch';
 type MeResponse = {
   profile?: {
     firstName?: string | null;
@@ -104,11 +105,7 @@ export default function ProfileScreen() {
     Object.entries(data.fields ?? {}).forEach(([key, value]) => {
       form.append(key, String(value));
     });
-    form.append('file', {
-      uri,
-      name: fileName,
-      type: mimeType,
-    } as unknown as Blob);
+    form.append('file', new File(uri));
 
     const uploadRes = await fetch(data.uploadUrl, {
       method: 'POST',

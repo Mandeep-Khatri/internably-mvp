@@ -32,6 +32,13 @@ export const ResourcesApi = {
   usersSuggestions: async () => (await api.get('/users/suggestions')).data,
   createPost: async (payload: { content: string; groupId?: string }) => (await api.post('/posts', payload)).data,
   postById: async (id: string) => (await api.get(`/posts/${id}`)).data,
+  reportPost: async (id: string, payload: { reason: string; details?: string }) =>
+    (await api.post(`/reports/posts/${id}`, payload)).data,
+  reportUser: async (id: string, payload: { reason: string; details?: string }) =>
+    (await api.post(`/reports/users/${id}`, payload)).data,
+  adminReports: async () => (await api.get('/admin/reports')).data,
+  updateReportStatus: async (id: string, status: 'OPEN' | 'REVIEWED' | 'RESOLVED') =>
+    (await api.patch(`/admin/reports/${id}/status`, { status })).data,
   submitApplication: async (payload: Record<string, unknown>) => (await api.post('/applications', payload)).data,
   mediaUploadUrl: async (payload: { fileName: string; mimeType: string; kind: string }) =>
     (await api.post('/media/upload-url', payload)).data,

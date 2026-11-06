@@ -21,6 +21,7 @@ import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 import FeedTopBar from '../shared/FeedTopBar';
 import SharePostModal from '../shared/SharePostModal';
+import ReportModal, { ReportTarget } from '../shared/ReportModal';
 
 type FeedPost = {
   id: string;
@@ -112,6 +113,7 @@ function peerMeta(peer: Peer) {
 export default function FeedScreen() {
   const [composerVisible, setComposerVisible] = useState(false);
   const [postToShare, setPostToShare] = useState<FeedPost | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -142,7 +144,6 @@ export default function FeedScreen() {
   const meQuery = useQuery<{ id: string }>({
     queryKey: ['me'],
     queryFn: ResourcesApi.usersMe,
-    enabled: searching,
   });
   const connectionsQuery = useQuery<Connection[]>({
     queryKey: ['connections'],
@@ -375,6 +376,16 @@ export default function FeedScreen() {
               onLike={() => toggleLikeMutation.mutate(item)}
               onComment={() => router.push(`/posts/${item.id}`)}
               onShare={() => setPostToShare(item)}
+              onReport={
+                meQuery.data?.id && item.author?.id && item.author.id !== meQuery.data.id
+                  ? () =>
+                      setReportTarget({
+                        type: 'post',
+                        id: item.id,
+                        label: `${postAuthorName(item)}'s post`,
+                      })
+                  : undefined
+              }
               onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
               onPressPost={() => router.push(`/posts/${item.id}`)}
             />
@@ -428,6 +439,11 @@ export default function FeedScreen() {
         visible={Boolean(postToShare)}
         post={postToShare}
         onClose={() => setPostToShare(null)}
+      />
+      <ReportModal
+        visible={Boolean(reportTarget)}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
       />
     </ScreenContainer>
   );

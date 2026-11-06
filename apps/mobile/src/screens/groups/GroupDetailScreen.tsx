@@ -4,7 +4,9 @@ import React from 'react';
 import { FlatList, Share, StyleSheet, Text, View } from 'react-native';
 import { colors, PostCard, spacing } from '@internably/ui/src';
 import { api } from '@/api/client';
+import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
+import ReportModal, { ReportTarget } from '../shared/ReportModal';
 
 type Group = {
   name?: string;
@@ -38,7 +40,13 @@ function postName(post: GroupPost) {
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const groupId = String(id);
+  const [reportTarget, setReportTarget] = React.useState<ReportTarget | null>(null);
   const queryClient = useQueryClient();
+
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
+  });
 
   const detailQuery = useQuery<Group>({
     queryKey: ['group', groupId],
@@ -102,10 +110,25 @@ export default function GroupDetailScreen() {
             onLike={() => likeMutation.mutate(item)}
             onComment={() => router.push(`/posts/${item.id}`)}
             onShare={() => Share.share({ message: `${postName(item)} on Internably:\n\n${item.content}` })}
+            onReport={
+              meQuery.data?.id && item.author?.id && item.author.id !== meQuery.data.id
+                ? () =>
+                    setReportTarget({
+                      type: 'post',
+                      id: item.id,
+                      label: `${postName(item)}'s post`,
+                    })
+                : undefined
+            }
             onPressAuthor={item.author?.id ? () => router.push(`/profile/${item.author?.id}`) : undefined}
             onPressPost={() => router.push(`/posts/${item.id}`)}
           />
         )}
+      />
+      <ReportModal
+        visible={Boolean(reportTarget)}
+        target={reportTarget}
+        onClose={() => setReportTarget(null)}
       />
     </ScreenContainer>
   );

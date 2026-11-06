@@ -235,6 +235,7 @@ model Post {
   comments       Comment[]
   likes          Like[]
   sharedMessages Message[]
+  reports        Report[]
 
   @@index([authorId, createdAt])
   @@index([groupId, createdAt])
@@ -368,16 +369,24 @@ model PushDevice {
 }
 
 model Report {
-  id             String      @id @default(cuid())
+  id             String       @id @default(cuid())
   reporterId     String
   reportedUserId String?
   postId         String?
   reason         String
+  details        String?
   status         ReportStatus @default(OPEN)
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  reporter       User        @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
-  reportedUser   User?       @relation("reportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reporter       User         @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User?        @relation("reportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  post           Post?        @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([reporterId, status])
+  @@index([reportedUserId, status])
+  @@index([postId, status])
+  @@index([createdAt])
 }
 
 model MediaAsset {

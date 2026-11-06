@@ -7,6 +7,7 @@ import { api } from '@/api/client';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
 import SharePostModal from '../shared/SharePostModal';
+import ReportModal from '../shared/ReportModal';
 
 type PostDetail = {
   id: string;
@@ -44,6 +45,7 @@ export default function PostDetailScreen() {
   const postId = String(id);
   const [comment, setComment] = useState('');
   const [shareVisible, setShareVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
   const commentInputRef = useRef<TextInput>(null);
   const queryClient = useQueryClient();
 
@@ -54,6 +56,10 @@ export default function PostDetailScreen() {
   });
 
   const post = postQuery.data;
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
+  });
 
   const commentsQuery = useQuery<Comment[]>({
     queryKey: ['post-comments', postId],
@@ -140,6 +146,11 @@ export default function PostDetailScreen() {
                 onLike={() => likeMutation.mutate()}
                 onComment={() => commentInputRef.current?.focus()}
                 onShare={() => setShareVisible(true)}
+                onReport={
+                  meQuery.data?.id && post.author?.id && post.author.id !== meQuery.data.id
+                    ? () => setReportVisible(true)
+                    : undefined
+                }
               />
             )}
             <Text style={styles.commentsTitle}>Comments</Text>
@@ -172,6 +183,19 @@ export default function PostDetailScreen() {
         visible={shareVisible}
         post={post ?? null}
         onClose={() => setShareVisible(false)}
+      />
+      <ReportModal
+        visible={reportVisible}
+        target={
+          post
+            ? {
+                type: 'post',
+                id: post.id,
+                label: `${postAuthorName(post)}'s post`,
+              }
+            : null
+        }
+        onClose={() => setReportVisible(false)}
       />
     </ScreenContainer>
   );

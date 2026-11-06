@@ -17,6 +17,7 @@ export type PostCardProps = {
   onLike?: () => void;
   onComment?: () => void;
   onShare?: () => void;
+  onReport?: () => void;
   onPressAuthor?: () => void;
   onPressPost?: () => void;
 };
@@ -41,6 +42,7 @@ export const PostCard = React.memo(function PostCard({
   onLike,
   onComment,
   onShare,
+  onReport,
   onPressAuthor,
   onPressPost,
 }: PostCardProps) {
@@ -82,6 +84,11 @@ export const PostCard = React.memo(function PostCard({
         <Pressable disabled={!onShare} onPress={onShare} style={styles.actionBtn}>
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
+        {!!onReport && (
+          <Pressable onPress={onReport} style={styles.actionBtn}>
+            <Text style={styles.reportText}>Report</Text>
+          </Pressable>
+        )}
       </View>
     </CardWrapper>
   );
@@ -154,6 +161,11 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: colors.text,
+    ...typography.secondary,
+    fontWeight: '600',
+  },
+  reportText: {
+    color: '#B42318',
     ...typography.secondary,
     fontWeight: '600',
   },

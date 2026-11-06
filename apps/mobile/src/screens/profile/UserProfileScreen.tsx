@@ -6,6 +6,7 @@ import { Alert, FlatList, Image, Modal, Pressable, Share, StyleSheet, Text, Text
 import { colors, spacing, typography } from '@internably/ui/src';
 import { ResourcesApi } from '@/api/resources';
 import ScreenContainer from '../shared/ScreenContainer';
+import ReportModal from '../shared/ReportModal';
 
 type UserProfileResponse = {
   id: string;
@@ -42,6 +43,7 @@ export default function UserProfileScreen() {
   const [search, setSearch] = React.useState('');
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [blockVisible, setBlockVisible] = React.useState(false);
+  const [reportVisible, setReportVisible] = React.useState(false);
   const [blockReason, setBlockReason] = React.useState('');
   const qc = useQueryClient();
 
@@ -49,6 +51,10 @@ export default function UserProfileScreen() {
     queryKey: ['user', userId],
     queryFn: () => ResourcesApi.userById(userId),
     enabled: Boolean(userId),
+  });
+  const meQuery = useQuery<{ id: string }>({
+    queryKey: ['me'],
+    queryFn: ResourcesApi.usersMe,
   });
   const connectionsQuery = useQuery<any[]>({
     queryKey: ['connections'],
@@ -248,6 +254,17 @@ export default function UserProfileScreen() {
             >
               <Text style={styles.menuText}>Block</Text>
             </Pressable>
+            {!!meQuery.data?.id && meQuery.data.id !== userId && (
+              <Pressable
+                onPress={() => {
+                  setMenuOpen(false);
+                  setReportVisible(true);
+                }}
+                style={styles.menuItem}
+              >
+                <Text style={styles.reportMenuText}>Report member</Text>
+              </Pressable>
+            )}
           </View>
         </Pressable>
       )}
@@ -351,6 +368,11 @@ export default function UserProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      <ReportModal
+        visible={reportVisible}
+        target={{ type: 'user', id: userId, label: name }}
+        onClose={() => setReportVisible(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -448,6 +470,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600',
+  },
+  reportMenuText: {
+    color: '#B42318',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   content: {
     paddingBottom: 120,

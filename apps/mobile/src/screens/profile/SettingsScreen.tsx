@@ -214,7 +214,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="heart"
           title="Community Guidelines"
-          onPress={() => void openExternal('https://internably.com/community-guidelines')}
+          onPress={() => router.push('/profile/community-guidelines')}
         />
         <View style={styles.divider} />
         <SettingsRow

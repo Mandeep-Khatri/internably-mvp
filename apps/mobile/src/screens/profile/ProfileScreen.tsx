@@ -216,7 +216,7 @@ export default function ProfileScreen() {
             <Pressable
               onPress={() => {
                 setMenuOpen(false);
-                Linking.openURL('https://internably.com/privacy');
+                Linking.openURL('https://www.internably.com/privacy-policy');
               }}
               style={styles.menuItem}
             >

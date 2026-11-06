@@ -208,7 +208,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="file-text"
           title="Terms"
-          onPress={() => void openExternal('https://internably.com/terms')}
+          onPress={() => router.push('/profile/terms')}
         />
         <View style={styles.divider} />
         <SettingsRow

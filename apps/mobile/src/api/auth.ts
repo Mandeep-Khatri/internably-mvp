@@ -22,7 +22,12 @@ export async function resendVerification(email: string) {
 
 export async function forgotPassword(email: string) {
   const { data } = await api.post('/auth/forgot-password', { email });
-  return data as { message?: string; token?: string };
+  return data as { message?: string };
+}
+
+export async function resetPassword(email: string, code: string, newPassword: string) {
+  const { data } = await api.post('/auth/reset-password', { email, code, newPassword });
+  return data as { message?: string };
 }
 
 export async function me() {

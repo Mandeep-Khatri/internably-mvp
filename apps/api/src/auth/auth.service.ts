@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -127,6 +132,24 @@ export class AuthService {
     return crypto.randomBytes(32).toString('hex');
   }
 
+  private generatePasswordResetCode() {
+    return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+  }
+
+  private hashPasswordResetCode(email: string, code: string) {
+    const secret = process.env.JWT_ACCESS_SECRET || 'change_me_access';
+    return crypto
+      .createHmac('sha256', secret)
+      .update(`${this.normalizeEmail(email)}:${code}`)
+      .digest('hex');
+  }
+
+  private passwordResetResponse() {
+    return {
+      message: 'If that email exists, a 6-digit password reset code has been sent.',
+    };
+  }
+
   private getEmailProvider() {
     return (process.env.EMAIL_PROVIDER || 'mock').trim().toLowerCase();
   }
@@ -176,9 +199,14 @@ export class AuthService {
       return;
     }
 
-    // Mock mode for local development without an email provider.
-    console.log(`[Internably] email(mock) -> ${to} | ${subject}`);
-    console.log(text);
+    if (provider === 'mock') {
+      // Mock mode for local development without an email provider.
+      console.log(`[Internably] email(mock) -> ${to} | ${subject}`);
+      console.log(text);
+      return;
+    }
+
+    throw new BadRequestException(`Unsupported email provider: ${provider}`);
   }
 
   private getVerificationLink(token: string) {
@@ -230,6 +258,23 @@ export class AuthService {
       `,
     });
     return verificationLink;
+  }
+
+  private async sendPasswordResetEmail(email: string, code: string) {
+    await this.sendEmail({
+      to: email,
+      subject: 'Reset your Internably password',
+      text: `Your Internably password reset code is ${code}.\n\nThis code expires in 15 minutes. If you did not request this, you can ignore this email.`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+          <h2>Reset your Internably password</h2>
+          <p>Enter this one-time code in the Internably app:</p>
+          <p style="font-size:30px;letter-spacing:8px;font-weight:800;margin:20px 0">${code}</p>
+          <p>This code expires in 15 minutes.</p>
+          <p>If you did not request a password reset, you can ignore this email.</p>
+        </div>
+      `,
+    });
   }
 
   private async getGoogleTokenInfo(idToken: string): Promise<GoogleTokenInfo> {
@@ -531,22 +576,111 @@ export class AuthService {
   }
 
   async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return { message: 'If that email exists, reset instructions were sent.' };
-    const token = await this.jwtService.signAsync(
-      { sub: user.id, type: 'password-reset' },
-      { secret: process.env.JWT_ACCESS_SECRET || 'change_me_access', expiresIn: '30m' },
-    );
-    return { message: 'Password reset token generated (MVP)', token };
+    const normalizedEmail = this.normalizeEmail(email);
+    const response = this.passwordResetResponse();
+
+    if (
+      (process.env.NODE_ENV || '').toLowerCase() === 'production' &&
+      this.getEmailProvider() !== 'resend'
+    ) {
+      throw new ServiceUnavailableException('Password reset email delivery is not configured.');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) return response;
+
+    const now = new Date();
+    const cooldownStartedAt = new Date(now.getTime() - 60_000);
+    if (user.passwordResetRequestedAt && user.passwordResetRequestedAt > cooldownStartedAt) {
+      return response;
+    }
+
+    const code = this.generatePasswordResetCode();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetCodeHash: this.hashPasswordResetCode(normalizedEmail, code),
+        passwordResetCodeExpiresAt: new Date(now.getTime() + 15 * 60_000),
+        passwordResetRequestedAt: now,
+        passwordResetAttempts: 0,
+      },
+    });
+
+    try {
+      await this.sendPasswordResetEmail(normalizedEmail, code);
+    } catch (error) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetCodeHash: null,
+          passwordResetCodeExpiresAt: null,
+          passwordResetRequestedAt: null,
+          passwordResetAttempts: 0,
+        },
+      });
+      if (error instanceof BadRequestException) throw error;
+      console.error('[Internably] Unable to send password reset email', error);
+      return response;
+    }
+
+    return response;
   }
 
-  async resetPassword(token: string, newPassword: string) {
-    const payload = await this.jwtService.verifyAsync<{ sub: string; type: string }>(token, {
-      secret: process.env.JWT_ACCESS_SECRET || 'change_me_access',
-    });
-    if (payload.type !== 'password-reset') throw new UnauthorizedException('Invalid token type');
+  async resetPassword(email: string, code: string, newPassword: string) {
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const invalidCode = () => new BadRequestException('Invalid or expired password reset code.');
+
+    if (
+      !user?.passwordResetCodeHash ||
+      !user.passwordResetCodeExpiresAt ||
+      user.passwordResetCodeExpiresAt <= new Date() ||
+      user.passwordResetAttempts >= 5
+    ) {
+      throw invalidCode();
+    }
+
+    const providedHash = this.hashPasswordResetCode(normalizedEmail, code);
+    const expected = Buffer.from(user.passwordResetCodeHash, 'hex');
+    const provided = Buffer.from(providedHash, 'hex');
+    const matches = expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
+
+    if (!matches) {
+      const nextAttempts = user.passwordResetAttempts + 1;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data:
+          nextAttempts >= 5
+            ? {
+                passwordResetCodeHash: null,
+                passwordResetCodeExpiresAt: null,
+                passwordResetAttempts: nextAttempts,
+              }
+            : { passwordResetAttempts: nextAttempts },
+      });
+      throw invalidCode();
+    }
+
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({ where: { id: payload.sub }, data: { passwordHash } });
-    return { message: 'Password updated' };
+    const passwordChangedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          passwordChangedAt,
+          passwordResetCodeHash: null,
+          passwordResetCodeExpiresAt: null,
+          passwordResetRequestedAt: null,
+          passwordResetAttempts: 0,
+        },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: passwordChangedAt },
+      }),
+    ]);
+
+    return { message: 'Password updated. Please log in with your new password.' };
   }
 }

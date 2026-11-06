@@ -59,6 +59,11 @@ model User {
   email              String               @unique
   username           String               @unique
   passwordHash       String
+  passwordChangedAt          DateTime?
+  passwordResetCodeHash      String?
+  passwordResetCodeExpiresAt DateTime?
+  passwordResetRequestedAt   DateTime?
+  passwordResetAttempts      Int                  @default(0)
   verificationTokenHash      String?      @unique
   verificationTokenExpiresAt DateTime?
   role               Role                 @default(USER)

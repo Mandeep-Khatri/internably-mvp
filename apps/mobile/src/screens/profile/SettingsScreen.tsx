@@ -202,7 +202,7 @@ export default function SettingsScreen() {
         <SettingsRow
           icon="shield"
           title="Privacy Policy"
-          onPress={() => void openExternal('https://internably.com/privacy')}
+          onPress={() => void openExternal('https://www.internably.com/privacy-policy')}
         />
         <View style={styles.divider} />
         <SettingsRow
